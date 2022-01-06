@@ -1,5 +1,6 @@
 use crate::board::{Coordinate, Piece};
 
+#[derive(PartialEq, Debug)]
 pub struct Move {
     src: Coordinate,
     dest: Coordinate,

@@ -5,7 +5,7 @@ use std::fmt;
 
 #[repr(u8)]
 #[allow(dead_code)]
-#[derive(TryFromPrimitive, Clone, Copy)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq)]
 pub enum Coordinate {
     A1 = 0,
     B1,
@@ -96,6 +96,23 @@ impl Coordinate {
 
         return coord_val >= (rank - 1) * 8 && coord_val < rank * 8;
     }
+
+    pub fn side_squares(&self) -> Vec<Coordinate> {
+        let mut res = vec![];
+        // i8 because the idx could be negative after applying the offset
+        let coord_idx = *self as u8;
+        let row_idx = coord_idx % 8;
+
+        if row_idx != 0 {
+            res.push(Coordinate::try_from(((coord_idx / 8) * 8) + row_idx - 1).unwrap());
+        }
+
+        if row_idx != 7 {
+            res.push(Coordinate::try_from(((coord_idx / 8) * 8) + row_idx + 1).unwrap());
+        }
+
+        res
+    }
 }
 
 pub struct Board {
@@ -105,7 +122,7 @@ pub struct Board {
 }
 
 impl Board {
-    fn new_empty() -> Board {
+    pub fn new_empty() -> Board {
         Board {
             pieces: [None; 64],
             is_game_over: false,
@@ -115,136 +132,236 @@ impl Board {
 
     pub fn new_starting_pos() -> Board {
         let mut board = Board::new_empty();
-        board.pieces[Coordinate::A1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Rook,
-        });
-        board.pieces[Coordinate::B1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Knight,
-        });
-        board.pieces[Coordinate::C1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Bishop,
-        });
-        board.pieces[Coordinate::D1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Queen,
-        });
-        board.pieces[Coordinate::E1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::King,
-        });
-        board.pieces[Coordinate::F1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Bishop,
-        });
-        board.pieces[Coordinate::G1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Knight,
-        });
-        board.pieces[Coordinate::H1 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Rook,
-        });
-        board.pieces[Coordinate::A2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::B2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::C2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::D2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::E2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::F2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::G2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::H2 as usize] = Some(Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::A8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Rook,
-        });
-        board.pieces[Coordinate::B8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Knight,
-        });
-        board.pieces[Coordinate::C8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Bishop,
-        });
-        board.pieces[Coordinate::D8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Queen,
-        });
-        board.pieces[Coordinate::E8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::King,
-        });
-        board.pieces[Coordinate::F8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Bishop,
-        });
-        board.pieces[Coordinate::G8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Knight,
-        });
-        board.pieces[Coordinate::H8 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Rook,
-        });
-        board.pieces[Coordinate::A7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::B7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::C7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::D7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::E7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::F7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::G7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
-        board.pieces[Coordinate::H7 as usize] = Some(Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        });
+        board.place_piece(
+            Coordinate::A1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Rook,
+            },
+        );
+        board.place_piece(
+            Coordinate::B1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Knight,
+            },
+        );
+        board.place_piece(
+            Coordinate::C1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Bishop,
+            },
+        );
+        board.place_piece(
+            Coordinate::D1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Queen,
+            },
+        );
+        board.place_piece(
+            Coordinate::E1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::King,
+            },
+        );
+        board.place_piece(
+            Coordinate::F1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Bishop,
+            },
+        );
+        board.place_piece(
+            Coordinate::G1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Knight,
+            },
+        );
+        board.place_piece(
+            Coordinate::H1,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Rook,
+            },
+        );
+        board.place_piece(
+            Coordinate::A2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::B2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::C2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::D2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::E2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::F2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::G2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::H2,
+            Piece {
+                color: Color::White,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::A8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Rook,
+            },
+        );
+        board.place_piece(
+            Coordinate::B8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Knight,
+            },
+        );
+        board.place_piece(
+            Coordinate::C8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Bishop,
+            },
+        );
+        board.place_piece(
+            Coordinate::D8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Queen,
+            },
+        );
+        board.place_piece(
+            Coordinate::E8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::King,
+            },
+        );
+        board.place_piece(
+            Coordinate::F8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Bishop,
+            },
+        );
+        board.place_piece(
+            Coordinate::G8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Knight,
+            },
+        );
+        board.place_piece(
+            Coordinate::H8,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Rook,
+            },
+        );
+        board.place_piece(
+            Coordinate::A7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::B7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::C7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::D7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::E7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::F7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::G7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
+        board.place_piece(
+            Coordinate::H7,
+            Piece {
+                color: Color::Black,
+                piece_type: PieceType::Pawn,
+            },
+        );
 
         board
+    }
+
+    pub fn place_piece(&mut self, coord: Coordinate, piece: Piece) {
+        self.pieces[coord as usize] = Some(piece);
     }
 
     pub fn print(&self) {
@@ -293,15 +410,33 @@ impl Board {
     pub fn get_player_color(&self) -> Color {
         self.player_turn
     }
+
+    pub fn get_opposing_player_color(&self) -> Color {
+        self.player_turn.other_color()
+    }
+
+    pub fn is_square_occupied(&self, coord: Coordinate) -> bool {
+        return self.pieces[coord as usize].is_some();
+    }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     White,
     Black,
 }
 
-#[derive(Clone, Copy)]
+impl Color {
+    pub fn other_color(&self) -> Color {
+        if *self == Color::White {
+            Color::Black
+        } else {
+            Color::White
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PieceType {
     Pawn,
     Bishop,
@@ -311,7 +446,7 @@ pub enum PieceType {
     Queen,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Piece {
     pub color: Color,
     pub piece_type: PieceType,
@@ -332,5 +467,33 @@ impl fmt::Display for Piece {
             Color::White => write!(f, "{}", to_print.white()),
             Color::Black => write!(f, "{}", to_print.cyan()),
         }
+    }
+}
+
+#[cfg(test)]
+mod coord_tests {
+    use super::*;
+
+    #[test]
+    fn side_squares_left_side_board() {
+        let src_square = Coordinate::A3;
+        let side_squares = src_square.side_squares();
+        assert!(side_squares.into_iter().eq(vec![Coordinate::B3]));
+    }
+
+    #[test]
+    fn side_squares_right_side_board() {
+        let src_square = Coordinate::H8;
+        let side_squares = src_square.side_squares();
+        assert!(side_squares.into_iter().eq(vec![Coordinate::G8]));
+    }
+
+    #[test]
+    fn side_squares_middle_board() {
+        let src_square = Coordinate::E4;
+        let side_squares = src_square.side_squares();
+        assert!(side_squares
+            .into_iter()
+            .eq(vec![Coordinate::D4, Coordinate::F4]));
     }
 }
