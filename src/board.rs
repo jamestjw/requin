@@ -86,6 +86,39 @@ impl Coordinate {
         return Coordinate::try_from(offset_val).expect("Invalid coordinate");
     }
 
+    // Returns the coordinate of the square some horizontal offset
+    // from this one. The offset can either be a left or
+    // right offset.
+    pub fn horizontal_offset(&self, offset: u8, left: bool) -> Coordinate {
+        let offset_val = if left {
+            *self as u8 - offset
+        } else {
+            *self as u8 + offset
+        };
+        return Coordinate::try_from(offset_val).expect("Invalid coordinate");
+    }
+
+    // Returns the coordinate of the square that is at a diagonal
+    // offset from this one. The combination of the front and left
+    // booleans determine which one of four directions the offset
+    // should be.
+    pub fn diagonal_offset(&self, front: bool, left: bool) -> Coordinate {
+        let mut offset_val = *self as u8;
+
+        if !left {
+            offset_val += 2
+        }
+
+        if front {
+            offset_val += 7
+        } else {
+            offset_val -= 9
+        }
+
+
+        return Coordinate::try_from(offset_val).expect("Invalid coordinate");
+    }
+
     // Returns true if this coordinate is in a certain rank
     // Rank should be between 1 to 8
     pub fn is_in_rank(&self, rank: u8) -> bool {
@@ -470,6 +503,96 @@ impl fmt::Display for Piece {
     }
 }
 
+#[repr(u8)]
+enum Direction {
+    N = 0,
+    NE = 1,
+    E = 2,
+    SE = 3,
+    S = 4,
+    SW = 5,
+    W = 6,
+    NW = 7,
+}
+
+// A table that knows which squares are adjacent to any
+// square on the board in all possible directions
+pub struct AdjacencyTable {
+    table: [[Option<Coordinate>; 8]; 64],
+}
+
+impl AdjacencyTable {
+    pub fn new() -> Self {
+        let mut t = AdjacencyTable {
+            table: [[None; 8]; 64],
+        };
+
+        for i in 0..64 {
+            // This is safe as these are all legal coordinates
+            let coord = Coordinate::try_from(i).unwrap();
+
+            // All squares below the 8th rank should have an
+            // adjacent square north of it
+            if !coord.is_in_rank(8) {
+                t.set(coord, coord.vertical_offset(1, true), Direction::N);
+            }
+
+            // All squares above the 1st rank should have an
+            // adjacent square south of it
+            if !coord.is_in_rank(1) {
+                t.set(coord, coord.vertical_offset(1, false), Direction::S);
+            }
+
+            // All squares not in the A-file should have an adjacent square
+            // on its left
+            // TODO: Figure out a better way to represent files
+            if !(i % 8 == 0) {
+                t.set(coord, coord.horizontal_offset(1, true), Direction::W);
+            }
+
+            // All squares not in the H-file should have an adjacent square
+            // on its left
+            // TODO: Figure out a better way to represent files
+            if !((i + 1) % 8 == 0) {
+                t.set(coord, coord.horizontal_offset(1, false), Direction::E);
+            }
+
+            // All squares not in the A-file and not on the 8th rank should have
+            // an adjacent square on its top left
+            if !((i % 8 == 0) || coord.is_in_rank(8)) {
+                t.set(coord, coord.diagonal_offset(true, true), Direction::NW);
+            }
+
+            // All squares not in the A-file and not on the 1st rank should have
+            // an adjacent square on its bottom left
+            if !((i % 8 == 0) || coord.is_in_rank(1)) {
+                t.set(coord, coord.diagonal_offset(false, true), Direction::SW);
+            }
+
+            // All squares not in the H-file and not on the 8th rank should have
+            // an adjacent square on its top right
+            if !(((i + 1) % 8 == 0) || coord.is_in_rank(8)) {
+                t.set(coord, coord.diagonal_offset(true, false), Direction::NE);
+            }
+
+            // All squares not in the H-file and not on the 1st rank should have
+            // an adjacent square on its bottom right
+            if !(((i + 1) % 8 == 0) || coord.is_in_rank(1)) {
+                t.set(coord, coord.diagonal_offset(false, false), Direction::SE);
+            }
+        }
+        t
+    }
+
+    fn set(&mut self, src: Coordinate, dest: Coordinate, dir: Direction) {
+        self.table[src as usize][dir as usize] = Some(dest);
+    }
+
+    fn get(&self, src: Coordinate, dir: Direction) -> Option<Coordinate> {
+        self.table[src as usize][dir as usize]
+    }
+}
+
 #[cfg(test)]
 mod coord_tests {
     use super::*;
@@ -495,5 +618,145 @@ mod coord_tests {
         assert!(side_squares
             .into_iter()
             .eq(vec![Coordinate::D4, Coordinate::F4]));
+    }
+
+    #[test]
+    fn horizontal_offsets() {
+        let src_square = Coordinate::E4;
+        assert_eq!(src_square.horizontal_offset(1, true), Coordinate::D4);
+        assert_eq!(src_square.horizontal_offset(2, true), Coordinate::C4);
+        assert_eq!(src_square.horizontal_offset(3, true), Coordinate::B4);
+        assert_eq!(src_square.horizontal_offset(1, false), Coordinate::F4);
+        assert_eq!(src_square.horizontal_offset(2, false), Coordinate::G4);
+        assert_eq!(src_square.horizontal_offset(3, false), Coordinate::H4);
+    }
+
+    #[test]
+    #[should_panic]
+    // TODO: Consider adding a test to ensure that we cannot
+    // go over the side of the board.
+    fn invalid_horizontal_offsets_below_board() {
+        let src_square = Coordinate::A1;
+        src_square.horizontal_offset(1, true);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_horizontal_offsets_above_board() {
+        let src_square = Coordinate::G8;
+        src_square.horizontal_offset(2, false);
+    }
+
+    #[test]
+    fn diagonal_offsets_center_square() {
+        let src_square = Coordinate::E4;
+        assert_eq!(src_square.diagonal_offset(true, true), Coordinate::D5);
+        assert_eq!(src_square.diagonal_offset(true, false), Coordinate::F5);
+        assert_eq!(src_square.diagonal_offset(false, true), Coordinate::D3);
+        assert_eq!(src_square.diagonal_offset(false, false), Coordinate::F3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn diagonal_offsets_top_edge_square() {
+        let src_square = Coordinate::G8;
+        src_square.diagonal_offset(true, true);
+    }
+
+    #[test]
+    #[should_panic]
+    fn diagonal_offsets_btm_edge_square() {
+        let src_square = Coordinate::G1;
+        src_square.diagonal_offset(false, true);
+    }
+
+    // TODO: Make these tests work
+    // #[test]
+    // #[should_panic]
+    // fn diagonal_offsets_left_edge_square() {
+    //     let src_square = Coordinate::A4;
+    //     src_square.diagonal_offset(true, true);
+    // }
+
+    // #[test]
+    // #[should_panic]
+    // fn diagonal_offsets_right_edge_square() {
+    //     let src_square = Coordinate::H4;
+    //     src_square.diagonal_offset(true, false);
+    // }
+}
+
+#[cfg(test)]
+mod adjacency_table_tests {
+    use super::*;
+
+    #[test]
+    fn center_square() {
+        let t = AdjacencyTable::new();
+        let src = Coordinate::E4;
+        assert_eq!(t.get(src, Direction::N), Some(Coordinate::E5));
+        assert_eq!(t.get(src, Direction::S), Some(Coordinate::E3));
+        assert_eq!(t.get(src, Direction::E), Some(Coordinate::F4));
+        assert_eq!(t.get(src, Direction::W), Some(Coordinate::D4));
+        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::D5));
+        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::F5));
+        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::D3));
+        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::F3));
+    }
+
+    #[test]
+    fn a_file_center_square() {
+        let t = AdjacencyTable::new();
+        let src = Coordinate::A4;
+        assert_eq!(t.get(src, Direction::N), Some(Coordinate::A5));
+        assert_eq!(t.get(src, Direction::S), Some(Coordinate::A3));
+        assert_eq!(t.get(src, Direction::E), Some(Coordinate::B4));
+        assert_eq!(t.get(src, Direction::W), None);
+        assert_eq!(t.get(src, Direction::NW), None);
+        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::B5));
+        assert_eq!(t.get(src, Direction::SW), None);
+        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::B3));
+    }
+
+    #[test]
+    fn h_file_center_square() {
+        let t = AdjacencyTable::new();
+        let src = Coordinate::H5;
+        assert_eq!(t.get(src, Direction::N), Some(Coordinate::H6));
+        assert_eq!(t.get(src, Direction::S), Some(Coordinate::H4));
+        assert_eq!(t.get(src, Direction::W), Some(Coordinate::G5));
+        assert_eq!(t.get(src, Direction::E), None);
+        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::G6));
+        assert_eq!(t.get(src, Direction::NE), None);
+        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::G4));
+        assert_eq!(t.get(src, Direction::SE), None);
+    }
+
+    #[test]
+    fn first_rank_center_square() {
+        let t = AdjacencyTable::new();
+        let src = Coordinate::D1;
+        assert_eq!(t.get(src, Direction::N), Some(Coordinate::D2));
+        assert_eq!(t.get(src, Direction::S), None);
+        assert_eq!(t.get(src, Direction::E), Some(Coordinate::E1));
+        assert_eq!(t.get(src, Direction::W), Some(Coordinate::C1));
+        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::C2));
+        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::E2));
+        assert_eq!(t.get(src, Direction::SW), None);
+        assert_eq!(t.get(src, Direction::SE), None);
+    }
+
+    #[test]
+    fn eighth_rank_center_square() {
+        let t = AdjacencyTable::new();
+        let src = Coordinate::C8;
+        assert_eq!(t.get(src, Direction::N), None);
+        assert_eq!(t.get(src, Direction::S), Some(Coordinate::C7));
+        assert_eq!(t.get(src, Direction::E), Some(Coordinate::D8));
+        assert_eq!(t.get(src, Direction::W), Some(Coordinate::B8));
+        assert_eq!(t.get(src, Direction::NW), None);
+        assert_eq!(t.get(src, Direction::NE), None);
+        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::B7));
+        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::D7));
     }
 }
