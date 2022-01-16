@@ -109,6 +109,7 @@ name = "requin"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "lazy_static",
  "num_enum",
 ]
 

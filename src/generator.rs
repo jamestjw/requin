@@ -1,5 +1,91 @@
-use crate::board::{Board, Coordinate, PieceType};
+use crate::board::{AdjacencyTable, Board, Coordinate, Direction, PieceType};
 use crate::r#move::Move;
+use std::convert::TryFrom;
+
+lazy_static! {
+    static ref ADJACENCY_TABLE: AdjacencyTable = AdjacencyTable::new();
+    static ref KNIGHT_MOVES_TABLE: KnightMovesTable = KnightMovesTable::new();
+}
+
+struct KnightMovesTable {
+    table: Vec<Vec<Coordinate>>,
+}
+
+impl KnightMovesTable {
+    pub fn new() -> Self {
+        let mut t = KnightMovesTable {
+            table: std::iter::repeat(vec![]).take(64).collect::<Vec<_>>(),
+        };
+
+        for i in 0..64 {
+            let coord = Coordinate::try_from(i as u8).unwrap();
+            let rank = coord.get_rank();
+            let file = coord.get_file();
+
+            if rank < 7 && file < 8 {
+                //   ___>
+                //   |
+                //   |
+                t.set(coord, Coordinate::try_from(i + 17).unwrap());
+            }
+
+            if rank < 8 && file < 7 {
+                //   ____>
+                //   |
+                t.set(coord, Coordinate::try_from(i + 10).unwrap());
+            }
+
+            if rank < 7 && file > 1 {
+                //  <___
+                //     |
+                //     |
+                t.set(coord, Coordinate::try_from(i + 15).unwrap());
+            }
+
+            if rank < 8 && file > 2 {
+                //    <|
+                //     |______
+                t.set(coord, Coordinate::try_from(i + 6).unwrap());
+            }
+
+            if rank > 2 && file < 8 {
+                //     |
+                //     |
+                //  <__|
+                t.set(coord, Coordinate::try_from(i - 15).unwrap());
+            }
+
+            if rank > 1 && file < 7 {
+                //  |
+                //  |____>
+                t.set(coord, Coordinate::try_from(i - 6).unwrap());
+            }
+
+            if rank > 2 && file > 1 {
+                //    |
+                //    |
+                // <__|
+                t.set(coord, Coordinate::try_from(i - 17).unwrap());
+            }
+
+            if rank > 1 && file > 2 {
+                //      |
+                // <____|
+                t.set(coord, Coordinate::try_from(i - 10).unwrap());
+            }
+        }
+
+        t
+    }
+
+    pub fn set(&mut self, src: Coordinate, dest: Coordinate) {
+        self.table[src as usize].push(dest);
+    }
+
+    pub fn get(&self, src: Coordinate) -> &Vec<Coordinate> {
+        &self.table[src as usize]
+    }
+}
 
 // Generate all legal moves for a particular pawn
 fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
@@ -43,28 +129,113 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     res
 }
 
-fn generate_bishop_moves(board: &Board, src: Coordinate) -> Vec<Move> {
-    let res = vec![];
+fn generate_bishop_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
+    let piece = board.get_from_coordinate(src).unwrap();
+    let mut res = vec![];
+
+    for dir in Direction::diagonal_iterator() {
+        let mut curr_square = src;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                // Check if square is occupied
+                if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
+                    // Add a move for the capture of an opposing color piece
+                    if occupying_piece.color != piece.color {
+                        res.push(Move::new(src, dest_square, piece, true));
+                    }
+
+                    // The bishop may not jump over a piece hence we stop the search
+                    break;
+                } else {
+                    res.push(Move::new(src, dest_square, piece, false));
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     res
 }
 
 fn generate_knight_moves(board: &Board, src: Coordinate) -> Vec<Move> {
-    let res = vec![];
+    let piece = board.get_from_coordinate(src).unwrap();
+    let mut res = vec![];
+
+    for dest_square in KNIGHT_MOVES_TABLE.get(src) {
+        match board.get_from_coordinate(*dest_square) {
+            Some(occupant) => {
+                // Capture an enemy piece
+                if occupant.color != piece.color {
+                    res.push(Move::new(src, *dest_square, piece, true));
+                }
+            }
+            None => {
+                res.push(Move::new(src, *dest_square, piece, false));
+            }
+        }
+    }
+
     res
 }
 
-fn generate_rook_moves(board: &Board, src: Coordinate) -> Vec<Move> {
-    let res = vec![];
+fn generate_rook_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
+    let piece = board.get_from_coordinate(src).unwrap();
+    let mut res = vec![];
+
+    for dir in Direction::horizontal_vertical_iterator() {
+        let mut curr_square = src;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                // Check if square is occupied
+                if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
+                    // Add a move for the capture of an opposing color piece
+                    if occupying_piece.color != piece.color {
+                        res.push(Move::new(src, dest_square, piece, true));
+                    }
+
+                    // The rook may not jump over a piece hence we stop the search
+                    break;
+                } else {
+                    res.push(Move::new(src, dest_square, piece, false));
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     res
 }
 
 fn generate_king_moves(board: &Board, src: Coordinate) -> Vec<Move> {
-    let res = vec![];
+    let piece = board.get_from_coordinate(src).unwrap();
+    let mut res = vec![];
+
+    for dir in Direction::iterator() {
+        if let Some(dest_square) = ADJACENCY_TABLE.get(src, *dir) {
+            // Check if square is occupied
+            if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
+                // Add a move for the capture of an opposing color piece
+                if occupying_piece.color != piece.color {
+                    res.push(Move::new(src, dest_square, piece, true));
+                }
+            } else {
+                res.push(Move::new(src, dest_square, piece, false));
+            }
+        }
+    }
+
     res
 }
 
 fn generate_queen_moves(board: &Board, src: Coordinate) -> Vec<Move> {
-    let res = vec![];
+    let mut res = generate_bishop_style_moves(board, src);
+    res.append(&mut generate_rook_style_moves(board, src));
     res
 }
 
@@ -76,8 +247,8 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
         let piece_moves = match piece.piece_type {
             PieceType::Pawn => generate_pawn_moves(board, coord),
             PieceType::Knight => generate_knight_moves(board, coord),
-            PieceType::Bishop => generate_bishop_moves(board, coord),
-            PieceType::Rook => generate_rook_moves(board, coord),
+            PieceType::Bishop => generate_bishop_style_moves(board, coord),
+            PieceType::Rook => generate_rook_style_moves(board, coord),
             PieceType::King => generate_king_moves(board, coord),
             PieceType::Queen => generate_queen_moves(board, coord),
         };
@@ -183,5 +354,631 @@ mod test {
             Move::new(piece_coord, Coordinate::F5, pawn, true),
             Move::new(piece_coord, Coordinate::E5, pawn, false),
         ]));
+    }
+
+    #[test]
+    fn generate_basic_bishop_moves() {
+        let mut board = Board::new_empty();
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, bishop);
+
+        let moves = generate_bishop_style_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 13);
+
+        // Top left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B7, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A8, bishop, false)));
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, bishop, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G6, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, bishop, false)));
+
+        // Bottom right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G2, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H1, bishop, false)));
+    }
+
+    #[test]
+    fn generate_bishop_style_moves_with_captures() {
+        let mut board = Board::new_empty();
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let capturable_piece_1 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Knight,
+        };
+        let capturable_piece_2 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, bishop);
+        board.place_piece(Coordinate::B7, capturable_piece_1);
+        board.place_piece(Coordinate::F3, capturable_piece_2);
+
+        let moves = generate_bishop_style_moves(&board, piece_coord);
+
+        // Top left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B7, bishop, true)));
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, bishop, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G6, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, bishop, false)));
+
+        // Bottom right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, bishop, true)));
+    }
+
+    #[test]
+    fn generate_bishop_style_moves_with_ally_blockades() {
+        let mut board = Board::new_empty();
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let blocking_piece_1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, bishop);
+        board.place_piece(Coordinate::B7, blocking_piece_1);
+        board.place_piece(Coordinate::F3, blocking_piece_2);
+
+        let moves = generate_bishop_style_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 8);
+
+        // Top left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, bishop, false)));
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, bishop, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G6, bishop, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, bishop, false)));
+    }
+
+    #[test]
+    fn generate_basic_rook_moves() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+
+        let moves = generate_rook_style_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 14);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E7, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E8, piece, false)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E1, piece, false)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H4, piece, false)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+    }
+
+    #[test]
+    fn generate_rook_moves_with_captures() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let capturable_piece_1 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Bishop,
+        };
+        let capturable_piece_2 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::E7, capturable_piece_1);
+        board.place_piece(Coordinate::G4, capturable_piece_2);
+
+        let moves = generate_rook_style_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 12);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E7, piece, true)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E1, piece, false)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, true)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+    }
+
+    #[test]
+    fn generate_rook_moves_with_ally_blockades() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let blocking_piece_1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::E7, blocking_piece_1);
+        board.place_piece(Coordinate::G4, blocking_piece_2);
+
+        let moves = generate_rook_style_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 10);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E1, piece, false)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_queen_moves() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+
+        let moves = generate_queen_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 27);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E7, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E8, piece, false)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E1, piece, false)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H4, piece, false)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+
+        // Top left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B7, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A8, piece, false)));
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, piece, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, piece, false)));
+
+        // Bottom right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H1, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_queen_moves_with_captures() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        let capturable_piece_1 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Bishop,
+        };
+        let capturable_piece_2 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::F5, capturable_piece_1);
+        board.place_piece(Coordinate::E2, capturable_piece_2);
+
+        let moves = generate_queen_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 24);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E7, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E8, piece, false)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, true)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H4, piece, false)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+
+        // Top left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B7, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A8, piece, false)));
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, piece, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, true)));
+
+        // Bottom right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H1, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_queen_moves_with_ally_blockades() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        let blocking_piece_1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::E6, blocking_piece_1);
+        board.place_piece(Coordinate::D5, blocking_piece_2);
+
+        let moves = generate_queen_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 20);
+
+        // Top
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+
+        // Bottom
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E1, piece, false)));
+
+        // Right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H4, piece, false)));
+
+        // Left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::A4, piece, false)));
+
+        // Top left
+
+        // Bottom left
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, piece, false)));
+
+        // Top right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, piece, false)));
+
+        // Bottom right
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::H1, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_knight_moves() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+
+        let moves = generate_knight_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 8);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G5, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_knight_moves_with_captures() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let capturable_piece_1 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Knight,
+        };
+        let capturable_piece_2 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::F6, capturable_piece_1);
+        board.place_piece(Coordinate::C3, capturable_piece_2);
+
+        let moves = generate_knight_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 8);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F6, piece, true)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C3, piece, true)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G5, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_knight_moves_with_ally_blockades() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::F6, blocking_piece_1);
+        board.place_piece(Coordinate::C3, blocking_piece_2);
+
+        let moves = generate_knight_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 6);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D6, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F2, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G5, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_king_moves() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+
+        let moves = generate_king_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 8);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_king_moves_with_captures() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let capturable_piece_1 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Bishop,
+        };
+        let capturable_piece_2 = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Knight,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::E5, capturable_piece_1);
+        board.place_piece(Coordinate::D3, capturable_piece_2);
+
+        let moves = generate_king_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 8);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, true)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, true)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+    }
+
+    #[test]
+    fn generate_basic_king_moves_with_ally_blockades() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let blocking_piece_1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let blocking_piece_2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+
+        let piece_coord = Coordinate::E4;
+
+        board.place_piece(piece_coord, piece);
+        board.place_piece(Coordinate::E5, blocking_piece_1);
+        board.place_piece(Coordinate::D3, blocking_piece_2);
+
+        let moves = generate_king_moves(&board, piece_coord);
+
+        assert_eq!(moves.len(), 6);
+
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
+        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
     }
 }

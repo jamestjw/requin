@@ -2,6 +2,7 @@ use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::fmt;
+use std::slice::Iter;
 
 #[repr(u8)]
 #[allow(dead_code)]
@@ -115,19 +116,36 @@ impl Coordinate {
             offset_val -= 9
         }
 
-
         return Coordinate::try_from(offset_val).expect("Invalid coordinate");
+    }
+
+    // Returns value 1..=8 corresponding to the rank of the square
+    pub fn get_rank(&self) -> u8 {
+        (*self as u8 / 8) + 1
+    }
+
+    // Returns value 1..=8 corresponding to the file of the square
+    pub fn get_file(&self) -> u8 {
+        (*self as u8 % 8) + 1
     }
 
     // Returns true if this coordinate is in a certain rank
     // Rank should be between 1 to 8
     pub fn is_in_rank(&self, rank: u8) -> bool {
         if rank < 1 || rank > 8 {
-            panic!("Invalid parameter passed to `is_in_rank`.`");
+            panic!("Invalid parameter passed to `is_in_rank`.");
         }
-        let coord_val = *self as u8;
 
-        return coord_val >= (rank - 1) * 8 && coord_val < rank * 8;
+        return self.get_rank() == rank;
+    }
+
+    // Returns true if this coordinate is in a certain file
+    // File should be between 1 to 8
+    pub fn is_in_file(&self, file: u8) -> bool {
+        if file < 1 || file > 8 {
+            panic!("Invalid parameter passed to `is_in_file`.");
+        }
+        return self.get_file() == file;
     }
 
     pub fn side_squares(&self) -> Vec<Coordinate> {
@@ -145,6 +163,10 @@ impl Coordinate {
         }
 
         res
+    }
+
+    pub fn to_algebraic_notation(&self) -> String {
+        format!("{:?}", *self).to_lowercase()
     }
 }
 
@@ -398,20 +420,19 @@ impl Board {
     }
 
     pub fn print(&self) {
-        for (i, piece) in self.pieces.iter().enumerate() {
-            // We add spaces before and after the piece
-            match piece {
-                Some(p) => print!(" {} ", p),
-                None => {
-                    // Use 'x' to represent an empty square
-                    print!(" x ");
+        for rank in (0..8).rev() {
+            for file in 0..8 {
+                // We add spaces before and after the piece
+                match self.pieces[rank * 8 + file] {
+                    Some(p) => print!(" {} ", p),
+                    None => {
+                        // Use 'x' to represent an empty square
+                        print!(" x ");
+                    }
                 }
             }
 
-            // Newline after 8 pieces
-            if (i + 1) % 8 == 0 {
-                println!("");
-            }
+            println!("");
         }
     }
 
@@ -479,6 +500,19 @@ pub enum PieceType {
     Queen,
 }
 
+impl PieceType {
+    pub fn to_algebraic_notation(&self) -> String {
+        match *self {
+            PieceType::Pawn => "".to_string(),
+            PieceType::Bishop => "B".to_string(),
+            PieceType::Knight => "N".to_string(),
+            PieceType::Rook => "R".to_string(),
+            PieceType::King => "K".to_string(),
+            PieceType::Queen => "Q".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Piece {
     pub color: Color,
@@ -504,7 +538,8 @@ impl fmt::Display for Piece {
 }
 
 #[repr(u8)]
-enum Direction {
+#[derive(Clone, Copy)]
+pub enum Direction {
     N = 0,
     NE = 1,
     E = 2,
@@ -513,6 +548,34 @@ enum Direction {
     SW = 5,
     W = 6,
     NW = 7,
+}
+
+impl Direction {
+    pub fn iterator() -> Iter<'static, Direction> {
+        static ALL_DIRECTIONS: [Direction; 8] = [
+            Direction::N,
+            Direction::S,
+            Direction::E,
+            Direction::W,
+            Direction::NE,
+            Direction::NW,
+            Direction::SE,
+            Direction::SW,
+        ];
+        ALL_DIRECTIONS.iter()
+    }
+
+    pub fn horizontal_vertical_iterator() -> Iter<'static, Direction> {
+        static HV_DIRECTIONS: [Direction; 4] =
+            [Direction::N, Direction::S, Direction::E, Direction::W];
+        HV_DIRECTIONS.iter()
+    }
+
+    pub fn diagonal_iterator() -> Iter<'static, Direction> {
+        static DIAG_DIRECTIONS: [Direction; 4] =
+            [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
+        DIAG_DIRECTIONS.iter()
+    }
 }
 
 // A table that knows which squares are adjacent to any
@@ -588,7 +651,7 @@ impl AdjacencyTable {
         self.table[src as usize][dir as usize] = Some(dest);
     }
 
-    fn get(&self, src: Coordinate, dir: Direction) -> Option<Coordinate> {
+    pub fn get(&self, src: Coordinate, dir: Direction) -> Option<Coordinate> {
         self.table[src as usize][dir as usize]
     }
 }
@@ -596,6 +659,30 @@ impl AdjacencyTable {
 #[cfg(test)]
 mod coord_tests {
     use super::*;
+
+    #[test]
+    fn is_in_file() {
+        assert!(Coordinate::A3.is_in_file(1));
+        assert!(Coordinate::B4.is_in_file(2));
+        assert!(Coordinate::C5.is_in_file(3));
+        assert!(Coordinate::D2.is_in_file(4));
+        assert!(Coordinate::E3.is_in_file(5));
+        assert!(Coordinate::F4.is_in_file(6));
+        assert!(Coordinate::G7.is_in_file(7));
+        assert!(Coordinate::H8.is_in_file(8));
+    }
+
+    #[test]
+    fn is_not_in_file() {
+        assert!(!Coordinate::A3.is_in_file(2));
+        assert!(!Coordinate::B4.is_in_file(3));
+        assert!(!Coordinate::C5.is_in_file(6));
+        assert!(!Coordinate::D2.is_in_file(1));
+        assert!(!Coordinate::E3.is_in_file(3));
+        assert!(!Coordinate::F4.is_in_file(3));
+        assert!(!Coordinate::G7.is_in_file(2));
+        assert!(!Coordinate::H8.is_in_file(6));
+    }
 
     #[test]
     fn side_squares_left_side_board() {
@@ -618,6 +705,32 @@ mod coord_tests {
         assert!(side_squares
             .into_iter()
             .eq(vec![Coordinate::D4, Coordinate::F4]));
+    }
+
+    #[test]
+    fn vertical_offsets() {
+        let src_square = Coordinate::E4;
+        assert_eq!(src_square.vertical_offset(1, true), Coordinate::E5);
+        assert_eq!(src_square.vertical_offset(2, true), Coordinate::E6);
+        assert_eq!(src_square.vertical_offset(3, true), Coordinate::E7);
+        assert_eq!(src_square.vertical_offset(4, true), Coordinate::E8);
+        assert_eq!(src_square.vertical_offset(1, false), Coordinate::E3);
+        assert_eq!(src_square.vertical_offset(2, false), Coordinate::E2);
+        assert_eq!(src_square.vertical_offset(3, false), Coordinate::E1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_vertical_offset_above_board() {
+        let src_square = Coordinate::E4;
+        src_square.vertical_offset(5, true);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_vertical_offset_below_board() {
+        let src_square = Coordinate::E4;
+        src_square.vertical_offset(4, false);
     }
 
     #[test]
@@ -684,6 +797,13 @@ mod coord_tests {
     //     let src_square = Coordinate::H4;
     //     src_square.diagonal_offset(true, false);
     // }
+
+    #[test]
+    fn algebraic_notation_of_squares() {
+        assert_eq!(Coordinate::E4.to_algebraic_notation(), "e4".to_string());
+        assert_eq!(Coordinate::F5.to_algebraic_notation(), "f5".to_string());
+        assert_eq!(Coordinate::C8.to_algebraic_notation(), "c8".to_string());
+    }
 }
 
 #[cfg(test)]
