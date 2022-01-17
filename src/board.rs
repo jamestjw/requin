@@ -170,10 +170,29 @@ impl Coordinate {
     }
 }
 
+bitfield! {
+    struct CastlingRights(u8);
+    get_white_kingside, set_white_kingside: 1;
+    get_white_queenside, set_white_queenside: 2;
+    get_black_kingside, set_black_kingside: 3;
+    get_black_queenside, set_black_queenside: 4;
+}
+
+impl CastlingRights {
+    pub fn new_with_all_disabled() -> Self {
+        CastlingRights(0)
+    }
+
+    pub fn new_with_all_enabled() -> Self {
+        CastlingRights(0b11111111)
+    }
+}
+
 pub struct Board {
     pieces: [Option<Piece>; 64],
     is_game_over: bool,
     player_turn: Color,
+    castling_rights: CastlingRights,
 }
 
 impl Board {
@@ -182,11 +201,16 @@ impl Board {
             pieces: [None; 64],
             is_game_over: false,
             player_turn: Color::White,
+            castling_rights: CastlingRights::new_with_all_disabled(),
         }
     }
 
     pub fn new_starting_pos() -> Board {
         let mut board = Board::new_empty();
+
+        // At the starting position, both players have their castling rights
+        board.castling_rights = CastlingRights::new_with_all_enabled();
+
         board.place_piece(
             Coordinate::A1,
             Piece {
@@ -471,6 +495,63 @@ impl Board {
 
     pub fn is_square_occupied(&self, coord: Coordinate) -> bool {
         return self.pieces[coord as usize].is_some();
+    }
+
+    pub fn may_castle(&self, color: Color, kingside: bool) -> bool {
+        match color {
+            Color::White => {
+                if kingside {
+                    self.castling_rights.get_white_kingside()
+                } else {
+                    self.castling_rights.get_white_queenside()
+                }
+            }
+            Color::Black => {
+                if kingside {
+                    self.castling_rights.get_black_kingside()
+                } else {
+                    self.castling_rights.get_black_queenside()
+                }
+            }
+        }
+    }
+
+    pub fn enable_castling(&mut self, color: Color, kingside: bool) {
+        match color {
+            Color::White => {
+                if kingside {
+                    self.castling_rights.set_white_kingside(true)
+                } else {
+                    self.castling_rights.set_white_queenside(true)
+                }
+            }
+            Color::Black => {
+                if kingside {
+                    self.castling_rights.set_black_kingside(true)
+                } else {
+                    self.castling_rights.set_black_queenside(true)
+                }
+            }
+        }
+    }
+
+    pub fn disable_castling(&mut self, color: Color, kingside: bool) {
+        match color {
+            Color::White => {
+                if kingside {
+                    self.castling_rights.set_white_kingside(false)
+                } else {
+                    self.castling_rights.set_white_queenside(false)
+                }
+            }
+            Color::Black => {
+                if kingside {
+                    self.castling_rights.set_black_kingside(false)
+                } else {
+                    self.castling_rights.set_black_queenside(false)
+                }
+            }
+        }
     }
 }
 
@@ -878,5 +959,52 @@ mod adjacency_table_tests {
         assert_eq!(t.get(src, Direction::NE), None);
         assert_eq!(t.get(src, Direction::SW), Some(Coordinate::B7));
         assert_eq!(t.get(src, Direction::SE), Some(Coordinate::D7));
+    }
+}
+
+#[cfg(test)]
+mod castling_rights_tests {
+    use super::*;
+
+    #[test]
+    fn default_castling_rights_disabled() {
+        let castling_rights = CastlingRights::new_with_all_disabled();
+        assert!(!castling_rights.get_white_kingside());
+        assert!(!castling_rights.get_white_queenside());
+        assert!(!castling_rights.get_black_kingside());
+        assert!(!castling_rights.get_black_queenside());
+    }
+
+    #[test]
+    fn default_castling_rights_enabled() {
+        let castling_rights = CastlingRights::new_with_all_enabled();
+        assert!(castling_rights.get_white_kingside());
+        assert!(castling_rights.get_white_queenside());
+        assert!(castling_rights.get_black_kingside());
+        assert!(castling_rights.get_black_queenside());
+    }
+
+    #[test]
+    fn enabling_white_kingside() {
+        let mut castling_rights = CastlingRights::new_with_all_disabled();
+
+        assert!(!castling_rights.get_white_kingside());
+        castling_rights.set_white_kingside(true);
+        assert!(castling_rights.get_white_kingside());
+        assert!(!castling_rights.get_white_queenside());
+        assert!(!castling_rights.get_black_kingside());
+        assert!(!castling_rights.get_black_queenside());
+    }
+
+    #[test]
+    fn disabling_black_queenside() {
+        let mut castling_rights = CastlingRights::new_with_all_enabled();
+
+        assert!(castling_rights.get_black_queenside());
+        castling_rights.set_black_queenside(false);
+        assert!(!castling_rights.get_black_queenside());
+        assert!(castling_rights.get_white_kingside());
+        assert!(castling_rights.get_white_queenside());
+        assert!(castling_rights.get_black_kingside());
     }
 }

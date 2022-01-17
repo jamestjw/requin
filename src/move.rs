@@ -1,11 +1,19 @@
 use crate::board::{Coordinate, Piece, PieceType};
 
 #[derive(PartialEq, Debug)]
+pub enum CastlingSide {
+    Kingside,
+    Queenside,
+    Unknown,
+}
+
+#[derive(PartialEq, Debug)]
 pub struct Move {
     src: Coordinate,
     dest: Coordinate,
     piece: Piece,
     is_capture: bool,
+    castling_side: CastlingSide,
 }
 
 impl Move {
@@ -15,6 +23,21 @@ impl Move {
             dest,
             piece,
             is_capture,
+            castling_side: CastlingSide::Unknown,
+        }
+    }
+
+    pub fn new_castling(src: Coordinate, dest: Coordinate, piece: Piece, kingside: bool) -> Self {
+        Move {
+            src,
+            dest,
+            piece,
+            is_capture: false,
+            castling_side: if kingside {
+                CastlingSide::Kingside
+            } else {
+                CastlingSide::Queenside
+            },
         }
     }
 

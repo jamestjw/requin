@@ -1,4 +1,4 @@
-use crate::board::{AdjacencyTable, Board, Coordinate, Direction, PieceType};
+use crate::board::{AdjacencyTable, Board, Color, Coordinate, Direction, PieceType};
 use crate::r#move::Move;
 use std::convert::TryFrom;
 
@@ -226,6 +226,86 @@ fn generate_king_moves(board: &Board, src: Coordinate) -> Vec<Move> {
                 }
             } else {
                 res.push(Move::new(src, dest_square, piece, false));
+            }
+        }
+    }
+
+    res.extend(generate_castling(board, src));
+
+    res
+}
+
+fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
+    let piece = board.get_from_coordinate(src).unwrap();
+    let mut res = vec![];
+
+    // Generate kingside castling
+    if board.may_castle(piece.color, true) {
+        match piece.color {
+            Color::White => {
+                let rook = board.get_from_coordinate(Coordinate::H1);
+
+                // TODO: Should there be some way of removing such a guard?
+                // Here we assume that if a player still has the right to castle
+                // kingside, this would automatically imply that the rook is
+                // currently on its starting square
+                assert!(
+                    src == Coordinate::E1 && rook.is_some(),
+                    "Unexpected error: Invalid white kingside castling configuration"
+                );
+
+                // TODO: Verify that no enemy pieces are attacking these squares
+                if board.get_from_coordinate(Coordinate::F1).is_none()
+                    && board.get_from_coordinate(Coordinate::G1).is_none()
+                {
+                    res.push(Move::new_castling(src, Coordinate::G1, piece, true));
+                }
+            }
+            Color::Black => {
+                let rook = board.get_from_coordinate(Coordinate::H8);
+                assert!(
+                    src == Coordinate::E8 && rook.is_some(),
+                    "Unexpected error: Invalid black kingside castling configuration"
+                );
+                if board.get_from_coordinate(Coordinate::F8).is_none()
+                    && board.get_from_coordinate(Coordinate::G8).is_none()
+                {
+                    res.push(Move::new_castling(src, Coordinate::G8, piece, true));
+                }
+            }
+        };
+    }
+
+    // Generate queenside castling
+    if board.may_castle(piece.color, false) {
+        match piece.color {
+            Color::White => {
+                let rook = board.get_from_coordinate(Coordinate::A1);
+
+                assert!(
+                    src == Coordinate::E1 && rook.is_some(),
+                    "Unexpected error: Invalid white queenside castling configuration"
+                );
+                if board.get_from_coordinate(Coordinate::B1).is_none()
+                    && board.get_from_coordinate(Coordinate::C1).is_none()
+                    && board.get_from_coordinate(Coordinate::D1).is_none()
+                {
+                    res.push(Move::new_castling(src, Coordinate::C1, piece, false));
+                }
+            }
+            Color::Black => {
+                let rook = board.get_from_coordinate(Coordinate::A8);
+                assert!(
+                    src == Coordinate::E8 && rook.is_some(),
+                    "Unexpected error: Invalid black queenside castling configuration"
+                );
+
+                if board.get_from_coordinate(Coordinate::B8).is_none()
+                    && board.get_from_coordinate(Coordinate::C8).is_none()
+                    && board.get_from_coordinate(Coordinate::D8).is_none()
+                {
+                    res.push(Move::new_castling(src, Coordinate::C8, piece, false));
+                }
             }
         }
     }
@@ -980,5 +1060,421 @@ mod test {
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
+    }
+
+    #[test]
+    fn generate_white_kingside_castling() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, true);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::H1, rook);
+
+        let moves = generate_castling(&board, Coordinate::E1);
+
+        assert_eq!(moves.len(), 1);
+        assert!(moves.contains(&Move::new_castling(
+            Coordinate::E1,
+            Coordinate::G1,
+            king,
+            true
+        )));
+    }
+
+    #[test]
+    fn generate_white_kingside_castling_with_pieces_in_the_way() {
+        let obstructing_pieces = [
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::F1,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::F1,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::G1,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::G1,
+            ),
+        ];
+
+        for (obstructing_piece, obstructing_square) in &obstructing_pieces {
+            let mut board = Board::new_empty();
+            board.enable_castling(Color::White, true);
+            let king = Piece {
+                color: Color::White,
+                piece_type: PieceType::King,
+            };
+            let rook = Piece {
+                color: Color::White,
+                piece_type: PieceType::Rook,
+            };
+
+            board.place_piece(Coordinate::E1, king);
+            board.place_piece(Coordinate::H1, rook);
+            board.place_piece(*obstructing_square, *obstructing_piece);
+
+            let moves = generate_castling(&board, Coordinate::E1);
+
+            assert_eq!(moves.len(), 0);
+        }
+    }
+
+    #[test]
+    fn generate_white_queenside_castling() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, false);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::A1, rook);
+
+        let moves = generate_castling(&board, Coordinate::E1);
+
+        assert_eq!(moves.len(), 1);
+        assert!(moves.contains(&Move::new_castling(
+            Coordinate::E1,
+            Coordinate::C1,
+            king,
+            false
+        )));
+    }
+
+    #[test]
+    fn generate_white_queenside_castling_with_pieces_in_the_way() {
+        let obstructing_pieces = [
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::C1,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::C1,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::B1,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::B1,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Queen,
+                },
+                Coordinate::D1,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Queen,
+                },
+                Coordinate::D1,
+            ),
+        ];
+
+        for (obstructing_piece, obstructing_square) in &obstructing_pieces {
+            let mut board = Board::new_empty();
+            board.enable_castling(Color::White, false);
+            let king = Piece {
+                color: Color::White,
+                piece_type: PieceType::King,
+            };
+            let rook = Piece {
+                color: Color::White,
+                piece_type: PieceType::Rook,
+            };
+
+            board.place_piece(Coordinate::E1, king);
+            board.place_piece(Coordinate::A1, rook);
+            board.place_piece(*obstructing_square, *obstructing_piece);
+
+            let moves = generate_castling(&board, Coordinate::E1);
+
+            assert_eq!(moves.len(), 0);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn generate_white_kingside_castling_with_missing_rook() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, true);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+
+        generate_castling(&board, Coordinate::E1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn generate_white_queenside_castling_with_missing_rook() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, false);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+
+        generate_castling(&board, Coordinate::E1);
+    }
+
+    #[test]
+    fn generate_black_kingside_castling() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, true);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::H8, rook);
+
+        let moves = generate_castling(&board, Coordinate::E8);
+
+        assert_eq!(moves.len(), 1);
+        assert!(moves.contains(&Move::new_castling(
+            Coordinate::E8,
+            Coordinate::G8,
+            king,
+            true
+        )));
+    }
+
+    #[test]
+    fn generate_black_queenside_castling() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, false);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::A8, rook);
+
+        let moves = generate_castling(&board, Coordinate::E8);
+
+        assert_eq!(moves.len(), 1);
+        assert!(moves.contains(&Move::new_castling(
+            Coordinate::E8,
+            Coordinate::C8,
+            king,
+            false
+        )));
+    }
+
+    #[test]
+    fn generate_black_kingside_castling_with_pieces_in_the_way() {
+        let obstructing_pieces = [
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::F8,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::F8,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::G8,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::G8,
+            ),
+        ];
+
+        for (obstructing_piece, obstructing_square) in &obstructing_pieces {
+            let mut board = Board::new_empty();
+            board.enable_castling(Color::Black, true);
+            let king = Piece {
+                color: Color::Black,
+                piece_type: PieceType::King,
+            };
+            let rook = Piece {
+                color: Color::Black,
+                piece_type: PieceType::Rook,
+            };
+
+            board.place_piece(Coordinate::E8, king);
+            board.place_piece(Coordinate::H8, rook);
+            board.place_piece(*obstructing_square, *obstructing_piece);
+
+            let moves = generate_castling(&board, Coordinate::E8);
+
+            assert_eq!(moves.len(), 0);
+        }
+    }
+
+    #[test]
+    fn generate_black_queenside_castling_with_pieces_in_the_way() {
+        let obstructing_pieces = [
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::C8,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Bishop,
+                },
+                Coordinate::C8,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::B8,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Knight,
+                },
+                Coordinate::B8,
+            ),
+            (
+                Piece {
+                    color: Color::White,
+                    piece_type: PieceType::Queen,
+                },
+                Coordinate::D8,
+            ),
+            (
+                Piece {
+                    color: Color::Black,
+                    piece_type: PieceType::Queen,
+                },
+                Coordinate::D8,
+            ),
+        ];
+
+        for (obstructing_piece, obstructing_square) in &obstructing_pieces {
+            let mut board = Board::new_empty();
+            board.enable_castling(Color::Black, false);
+            let king = Piece {
+                color: Color::Black,
+                piece_type: PieceType::King,
+            };
+            let rook = Piece {
+                color: Color::Black,
+                piece_type: PieceType::Rook,
+            };
+
+            board.place_piece(Coordinate::E8, king);
+            board.place_piece(Coordinate::A8, rook);
+            board.place_piece(*obstructing_square, *obstructing_piece);
+
+            let moves = generate_castling(&board, Coordinate::E8);
+
+            assert_eq!(moves.len(), 0);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn generate_black_kingside_castling_with_missing_rook() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, true);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+
+        generate_castling(&board, Coordinate::E8);
+    }
+
+    #[test]
+    #[should_panic]
+    fn generate_black_queenside_castling_with_missing_rook() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, false);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+
+        generate_castling(&board, Coordinate::E8);
     }
 }
