@@ -6,7 +6,7 @@ use std::slice::Iter;
 
 #[repr(u8)]
 #[allow(dead_code)]
-#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coordinate {
     A1 = 0,
     B1,
