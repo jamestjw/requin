@@ -1,3 +1,4 @@
+use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
@@ -489,6 +490,10 @@ impl Board {
         self.player_turn
     }
 
+    pub fn set_player_color(&mut self, color: Color) {
+        self.player_turn = color;
+    }
+
     pub fn get_opposing_player_color(&self) -> Color {
         self.player_turn.other_color()
     }
@@ -552,6 +557,62 @@ impl Board {
                 }
             }
         }
+    }
+
+    // Applies a move to the board
+    // This does not check that the move is legal
+    pub fn apply_move(&mut self, m: &Move) {
+        // Handle a normal move
+        if m.castling_side == CastlingSide::Unknown {
+            let original_piece = self.pieces[m.src as usize].take();
+            self.pieces[m.dest as usize] = original_piece;
+        } else {
+            // Handle castling
+            let (king_src, king_dest, rook_src, rook_dest) =
+                match self.get_from_coordinate(m.src).unwrap().color {
+                    Color::White => {
+                        if m.castling_side == CastlingSide::Kingside {
+                            (
+                                Coordinate::E1,
+                                Coordinate::G1,
+                                Coordinate::H1,
+                                Coordinate::F1,
+                            )
+                        } else {
+                            (
+                                Coordinate::E1,
+                                Coordinate::C1,
+                                Coordinate::A1,
+                                Coordinate::D1,
+                            )
+                        }
+                    }
+                    Color::Black => {
+                        if m.castling_side == CastlingSide::Kingside {
+                            (
+                                Coordinate::E8,
+                                Coordinate::G8,
+                                Coordinate::H8,
+                                Coordinate::F8,
+                            )
+                        } else {
+                            (
+                                Coordinate::E8,
+                                Coordinate::C8,
+                                Coordinate::A8,
+                                Coordinate::D8,
+                            )
+                        }
+                    }
+                };
+
+            let king = self.pieces[king_src as usize].take();
+            let rook = self.pieces[rook_src as usize].take();
+            self.pieces[king_dest as usize] = king;
+            self.pieces[rook_dest as usize] = rook;
+        }
+
+        self.player_turn = self.get_opposing_player_color();
     }
 }
 
@@ -1006,5 +1067,176 @@ mod castling_rights_tests {
         assert!(castling_rights.get_white_kingside());
         assert!(castling_rights.get_white_queenside());
         assert!(castling_rights.get_black_kingside());
+    }
+}
+
+#[cfg(test)]
+mod board_tests {
+    use super::*;
+
+    #[test]
+    fn apply_simple_piece_displacement_to_board() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+
+        board.place_piece(Coordinate::E4, piece);
+
+        let m = Move::new(Coordinate::E4, Coordinate::H7, piece, false);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        // Check that the piece has moved
+        assert!(board.get_from_coordinate(Coordinate::E4).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::H7).unwrap(), piece);
+    }
+
+    #[test]
+    fn apply_pawn_capture_to_board() {
+        let mut board = Board::new_empty();
+        let white_pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let black_pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+
+        board.place_piece(Coordinate::E4, white_pawn);
+        board.place_piece(Coordinate::F5, black_pawn);
+
+        let m = Move::new(Coordinate::E4, Coordinate::F5, white_pawn, true);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        // Check that the white pawn has moved
+        assert!(board.get_from_coordinate(Coordinate::E4).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::F5).unwrap(),
+            white_pawn
+        );
+    }
+
+    #[test]
+    fn apply_white_kingside_castling_to_board() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::H1, rook);
+
+        let m = Move::new_castling(Coordinate::E1, Coordinate::G1, king, true);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        assert!(board.get_from_coordinate(Coordinate::E1).is_none());
+        assert!(board.get_from_coordinate(Coordinate::H1).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::G1).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::F1).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_white_queenside_castling_to_board() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::A1, rook);
+
+        let m = Move::new_castling(Coordinate::E1, Coordinate::C1, king, false);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        assert!(board.get_from_coordinate(Coordinate::E1).is_none());
+        assert!(board.get_from_coordinate(Coordinate::A1).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::C1).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::D1).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_black_kingside_castling_to_board() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::H8, rook);
+
+        let m = Move::new_castling(Coordinate::E8, Coordinate::G8, king, true);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        assert!(board.get_from_coordinate(Coordinate::E8).is_none());
+        assert!(board.get_from_coordinate(Coordinate::H8).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::G8).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::F8).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_black_queenside_castling_to_board() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::A8, rook);
+
+        let m = Move::new_castling(Coordinate::E8, Coordinate::C8, king, false);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        assert!(board.get_from_coordinate(Coordinate::E8).is_none());
+        assert!(board.get_from_coordinate(Coordinate::A8).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::C8).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::D8).unwrap(), rook);
     }
 }

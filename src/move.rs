@@ -9,11 +9,11 @@ pub enum CastlingSide {
 
 #[derive(PartialEq, Debug)]
 pub struct Move {
-    src: Coordinate,
+    pub src: Coordinate,
     pub dest: Coordinate,
     piece: Piece,
     is_capture: bool,
-    castling_side: CastlingSide,
+    pub castling_side: CastlingSide,
 }
 
 impl Move {
