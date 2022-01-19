@@ -212,7 +212,7 @@ fn generate_rook_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     res
 }
 
-fn generate_king_moves(board: &Board, src: Coordinate) -> Vec<Move> {
+fn generate_king_moves(board: &Board, src: Coordinate, with_castling: bool) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
     let mut res = vec![];
 
@@ -230,7 +230,9 @@ fn generate_king_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         }
     }
 
-    res.extend(generate_castling(board, src));
+    if with_castling {
+        res.extend(generate_castling(board, src));
+    }
 
     res
 }
@@ -328,7 +330,26 @@ fn generate_queen_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     res
 }
 
-// Generate all legal moves given a certain board
+// Determines whether a given move is legal
+fn is_move_legal(board: &Board, color: Color, m: &Move) -> bool {
+    let mut board_copy = board.clone();
+    // Hypothetically apply the move
+    board_copy.apply_move(m);
+    let king_coord = board_copy.get_king_coordinate(color);
+
+    // Check if the current player's king is in danger
+    let moves = generate_moves(&board_copy);
+
+    for m in moves {
+        if m.dest == king_coord {
+            return false;
+        }
+    }
+
+    true
+}
+
+// Generate all moves given a certain board
 pub fn generate_moves(board: &Board) -> Vec<Move> {
     let mut res = vec![];
 
@@ -338,12 +359,23 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
             PieceType::Knight => generate_knight_moves(board, coord),
             PieceType::Bishop => generate_bishop_style_moves(board, coord),
             PieceType::Rook => generate_rook_style_moves(board, coord),
-            PieceType::King => generate_king_moves(board, coord),
+            PieceType::King => generate_king_moves(board, coord, true),
             PieceType::Queen => generate_queen_moves(board, coord),
         };
         res.extend(piece_moves);
     }
+
     res
+}
+
+pub fn generate_legal_moves(board: &Board) -> Vec<Move> {
+    // Filter out illegal moves, i.e. moves that endanger the king
+    let player_color = board.get_player_color();
+
+    generate_moves(board)
+        .into_iter()
+        .filter(|m| is_move_legal(board, player_color, m))
+        .collect()
 }
 
 fn generate_pawn_controlled_squares(board: &Board, src: Coordinate) -> Vec<Coordinate> {
@@ -376,7 +408,7 @@ pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<C
                 PieceType::Knight => generate_knight_moves(board, coord),
                 PieceType::Bishop => generate_bishop_style_moves(board, coord),
                 PieceType::Rook => generate_rook_style_moves(board, coord),
-                PieceType::King => generate_king_moves(board, coord),
+                PieceType::King => generate_king_moves(board, coord, false),
                 PieceType::Queen => generate_queen_moves(board, coord),
                 _ => panic!("Unexpected piece type."),
             };
@@ -1033,7 +1065,7 @@ mod test {
 
         board.place_piece(piece_coord, piece);
 
-        let moves = generate_king_moves(&board, piece_coord);
+        let moves = generate_king_moves(&board, piece_coord, true);
 
         assert_eq!(moves.len(), 8);
 
@@ -1069,7 +1101,7 @@ mod test {
         board.place_piece(Coordinate::E5, capturable_piece_1);
         board.place_piece(Coordinate::D3, capturable_piece_2);
 
-        let moves = generate_king_moves(&board, piece_coord);
+        let moves = generate_king_moves(&board, piece_coord, true);
 
         assert_eq!(moves.len(), 8);
 
@@ -1105,7 +1137,7 @@ mod test {
         board.place_piece(Coordinate::E5, blocking_piece_1);
         board.place_piece(Coordinate::D3, blocking_piece_2);
 
-        let moves = generate_king_moves(&board, piece_coord);
+        let moves = generate_king_moves(&board, piece_coord, true);
 
         assert_eq!(moves.len(), 6);
 
@@ -1791,5 +1823,172 @@ mod test {
         assert_eq!(coords.len(), 2);
         assert!(coords.contains(&Coordinate::D4));
         assert!(coords.contains(&Coordinate::F4));
+    }
+
+    #[test]
+    fn king_cannot_move_to_attacked_square() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E4, king);
+
+        // Without the obstruction of enemy pieces, the king can go to D5, E5 and F5
+        let initial_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+
+        assert!(initial_dest_squares.contains(&Coordinate::D5));
+        assert!(initial_dest_squares.contains(&Coordinate::E5));
+        assert!(initial_dest_squares.contains(&Coordinate::F5));
+
+        // The rook controls D5, E5 and F5 from A5
+        board.place_piece(Coordinate::A5, enemy_rook);
+
+        // The king can no longer go to those three squares
+        let final_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+
+        assert!(!final_dest_squares.contains(&Coordinate::D5));
+        assert!(!final_dest_squares.contains(&Coordinate::E5));
+        assert!(!final_dest_squares.contains(&Coordinate::F5));
+    }
+
+    #[test]
+    fn queen_cannot_move_away_if_it_covers_the_king() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let queen = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E4, king);
+        board.place_piece(Coordinate::E5, queen);
+
+        // Without the enemy rook, the queen is free to move.
+        let initial_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .filter(|m| m.piece == queen)
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+
+        assert!(initial_dest_squares.len() != 0);
+
+        board.place_piece(Coordinate::E8, enemy_rook);
+
+        let final_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .filter(|m| m.piece == queen)
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+
+        assert_eq!(final_dest_squares.len(), 3);
+        // The queen can move while still covering the king or
+        // capture the attacking piece
+        assert!(initial_dest_squares.contains(&Coordinate::E6));
+        assert!(initial_dest_squares.contains(&Coordinate::E7));
+        assert!(initial_dest_squares.contains(&Coordinate::E8));
+    }
+
+    #[test]
+    fn bishop_cannot_move_away_if_it_covers_the_king() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+    
+        board.place_piece(Coordinate::E4, king);
+        board.place_piece(Coordinate::E5, bishop);
+    
+        // Without the enemy rook, the bishop is free to move.
+        let initial_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .filter(|m| m.piece == bishop)
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+    
+        assert!(initial_dest_squares.len() != 0);
+    
+        board.place_piece(Coordinate::E8, enemy_rook);
+    
+        let final_dest_squares = generate_legal_moves(&board)
+            .iter()
+            .filter(|m| m.piece == bishop)
+            .map(|m| m.dest)
+            .collect::<Vec<Coordinate>>();
+    
+        // The bishop cannot move at all
+        assert_eq!(final_dest_squares.len(), 0);
+    }
+
+    #[test]
+    fn forced_to_deal_with_checks() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let knight  = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::D1, bishop);
+        board.place_piece(Coordinate::G1, knight);
+        board.place_piece(Coordinate::A8, rook);
+        board.place_piece(Coordinate::E8, enemy_rook);
+
+        let moves = generate_legal_moves(&board);
+        assert_eq!(moves.len(), 6);
+        // King walks away from the check
+        assert!(moves.contains(&Move::new(Coordinate::E1, Coordinate::D2, king, false)));
+        assert!(moves.contains(&Move::new(Coordinate::E1, Coordinate::F1, king, false)));
+        assert!(moves.contains(&Move::new(Coordinate::E1, Coordinate::F2, king, false)));
+
+        // Knight or bishop blocks
+        assert!(moves.contains(&Move::new(Coordinate::D1, Coordinate::E2, bishop, false)));
+        assert!(moves.contains(&Move::new(Coordinate::G1, Coordinate::E2, knight, false)));
+
+        // Capture the attacking piece
+        assert!(moves.contains(&Move::new(Coordinate::A8, Coordinate::E8, rook, true)));
     }
 }

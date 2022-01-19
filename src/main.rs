@@ -1,5 +1,5 @@
 use requin::board::Board;
-use requin::generator::generate_moves;
+use requin::generator::generate_legal_moves;
 
 fn main() {
     let board = Board::new_starting_pos();
@@ -7,7 +7,7 @@ fn main() {
 
     println!("Legal moves in this position:");
 
-    for candidate_move in generate_moves(&board) {
+    for candidate_move in generate_legal_moves(&board) {
         println!("{}", candidate_move.to_algebraic_notation());
     }
 }

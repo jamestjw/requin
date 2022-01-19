@@ -11,7 +11,7 @@ pub enum CastlingSide {
 pub struct Move {
     pub src: Coordinate,
     pub dest: Coordinate,
-    piece: Piece,
+    pub piece: Piece,
     is_capture: bool,
     pub castling_side: CastlingSide,
 }

@@ -172,6 +172,7 @@ impl Coordinate {
 }
 
 bitfield! {
+    #[derive(Clone, Copy)]
     struct CastlingRights(u8);
     get_white_kingside, set_white_kingside: 1;
     get_white_queenside, set_white_queenside: 2;
@@ -189,6 +190,7 @@ impl CastlingRights {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Board {
     pieces: [Option<Piece>; 64],
     is_game_over: bool,
@@ -613,6 +615,21 @@ impl Board {
         }
 
         self.player_turn = self.get_opposing_player_color();
+    }
+
+    pub fn get_king_coordinate(&self, color: Color) -> Coordinate {
+        for (i, piece) in self.pieces.iter().enumerate() {
+            match piece {
+                Some(piece) => {
+                    if piece.color == color && piece.piece_type == PieceType::King {
+                        return Coordinate::try_from(i as u8).unwrap();
+                    }
+                }
+                None => {}
+            }
+        }
+
+        panic!("Missing {:?} king on the board", color);
     }
 }
 
