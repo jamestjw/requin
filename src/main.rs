@@ -1,13 +1,9 @@
 use requin::board::Board;
-use requin::generator::generate_legal_moves;
+use requin::game::Game;
 
 fn main() {
     let board = Board::new_starting_pos();
-    board.print();
+    let mut game = Game::new(board);
 
-    println!("Legal moves in this position:");
-
-    for candidate_move in generate_legal_moves(&board) {
-        println!("{}", candidate_move.to_algebraic_notation());
-    }
+    game.play_game();
 }

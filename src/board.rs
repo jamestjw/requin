@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::slice::Iter;
 
+pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +78,11 @@ pub enum Coordinate {
 }
 
 impl Coordinate {
+    // Rank is between 1-8, file is between 1-8
+    pub fn new_from_rank_file(rank: u8, file: u8) -> Coordinate {
+        Coordinate::try_from((rank - 1) * 8 + (file - 1)).unwrap()
+    }
+
     // Returns the coordinate of the square some vertical offset
     // from this one. The offset can either be a front or
     // backward offset.
@@ -569,49 +576,52 @@ impl Board {
             let original_piece = self.pieces[m.src as usize].take();
             self.pieces[m.dest as usize] = original_piece;
         } else {
+            let player_color = self.get_from_coordinate(m.src).unwrap().color;
             // Handle castling
-            let (king_src, king_dest, rook_src, rook_dest) =
-                match self.get_from_coordinate(m.src).unwrap().color {
-                    Color::White => {
-                        if m.castling_side == CastlingSide::Kingside {
-                            (
-                                Coordinate::E1,
-                                Coordinate::G1,
-                                Coordinate::H1,
-                                Coordinate::F1,
-                            )
-                        } else {
-                            (
-                                Coordinate::E1,
-                                Coordinate::C1,
-                                Coordinate::A1,
-                                Coordinate::D1,
-                            )
-                        }
+            let (king_src, king_dest, rook_src, rook_dest) = match player_color {
+                Color::White => {
+                    if m.castling_side == CastlingSide::Kingside {
+                        (
+                            Coordinate::E1,
+                            Coordinate::G1,
+                            Coordinate::H1,
+                            Coordinate::F1,
+                        )
+                    } else {
+                        (
+                            Coordinate::E1,
+                            Coordinate::C1,
+                            Coordinate::A1,
+                            Coordinate::D1,
+                        )
                     }
-                    Color::Black => {
-                        if m.castling_side == CastlingSide::Kingside {
-                            (
-                                Coordinate::E8,
-                                Coordinate::G8,
-                                Coordinate::H8,
-                                Coordinate::F8,
-                            )
-                        } else {
-                            (
-                                Coordinate::E8,
-                                Coordinate::C8,
-                                Coordinate::A8,
-                                Coordinate::D8,
-                            )
-                        }
+                }
+                Color::Black => {
+                    if m.castling_side == CastlingSide::Kingside {
+                        (
+                            Coordinate::E8,
+                            Coordinate::G8,
+                            Coordinate::H8,
+                            Coordinate::F8,
+                        )
+                    } else {
+                        (
+                            Coordinate::E8,
+                            Coordinate::C8,
+                            Coordinate::A8,
+                            Coordinate::D8,
+                        )
                     }
-                };
+                }
+            };
 
             let king = self.pieces[king_src as usize].take();
             let rook = self.pieces[rook_src as usize].take();
             self.pieces[king_dest as usize] = king;
             self.pieces[rook_dest as usize] = rook;
+
+            self.disable_castling(player_color, true);
+            self.disable_castling(player_color, false);
         }
 
         self.player_turn = self.get_opposing_player_color();
@@ -660,6 +670,20 @@ pub enum PieceType {
 }
 
 impl PieceType {
+    pub fn new_from_string(s: &str) -> Result<Self, &'static str> {
+        let res = match s {
+            "B" => PieceType::Bishop,
+            "N" => PieceType::Knight,
+            "R" => PieceType::Rook,
+            "K" => PieceType::King,
+            "Q" => PieceType::Queen,
+            "" => PieceType::Pawn,
+            _ => return Err("Invalid piece type."),
+        };
+
+        Ok(res)
+    }
+
     pub fn to_algebraic_notation(&self) -> String {
         match *self {
             PieceType::Pawn => "".to_string(),
@@ -1158,7 +1182,7 @@ mod board_tests {
         board.place_piece(Coordinate::E1, king);
         board.place_piece(Coordinate::H1, rook);
 
-        let m = Move::new_castling(Coordinate::E1, Coordinate::G1, king, true);
+        let m = Move::new_castling(Color::White, true);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1186,7 +1210,7 @@ mod board_tests {
         board.place_piece(Coordinate::E1, king);
         board.place_piece(Coordinate::A1, rook);
 
-        let m = Move::new_castling(Coordinate::E1, Coordinate::C1, king, false);
+        let m = Move::new_castling(Color::White, false);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1215,7 +1239,7 @@ mod board_tests {
         board.place_piece(Coordinate::E8, king);
         board.place_piece(Coordinate::H8, rook);
 
-        let m = Move::new_castling(Coordinate::E8, Coordinate::G8, king, true);
+        let m = Move::new_castling(Color::Black, true);
 
         assert_eq!(board.get_player_color(), Color::Black);
 
@@ -1244,7 +1268,7 @@ mod board_tests {
         board.place_piece(Coordinate::E8, king);
         board.place_piece(Coordinate::A8, rook);
 
-        let m = Move::new_castling(Coordinate::E8, Coordinate::C8, king, false);
+        let m = Move::new_castling(Color::Black, false);
 
         assert_eq!(board.get_player_color(), Color::Black);
 
@@ -1256,4 +1280,9 @@ mod board_tests {
         assert_eq!(board.get_from_coordinate(Coordinate::C8).unwrap(), king);
         assert_eq!(board.get_from_coordinate(Coordinate::D8).unwrap(), rook);
     }
+}
+
+// Converts "a" to 1, "b" to 2 and so on, panics if it gets an invalid string
+pub fn file_to_index(s: &str) -> u8 {
+    (1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()) as u8
 }

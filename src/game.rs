@@ -1,0 +1,527 @@
+use crate::{
+    board::{file_to_index, Board, Coordinate, PieceType},
+    clear_screen,
+};
+use crate::{generator::generate_legal_moves, r#move::Move};
+use itertools::Itertools;
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::io::{self, Write};
+
+pub struct Game {
+    move_list: Vec<Move>,
+    board_history: Vec<Board>,
+    current_legal_moves: Vec<Move>, // Legal moves for the current board
+}
+
+impl Game {
+    pub fn new(starting_board: Board) -> Game {
+        Game {
+            move_list: vec![],
+            board_history: vec![starting_board],
+            current_legal_moves: vec![],
+        }
+    }
+
+    fn current_board(&self) -> &Board {
+        // Board history should never be empty
+        self.board_history.last().unwrap()
+    }
+
+    fn print_current_board(&self) {
+        self.current_board().print();
+    }
+
+    // TODO: Support promotions
+    fn find_legal_move(
+        &self,
+        piece_type: PieceType,
+        dest_coord: Coordinate,
+        src_rank: Option<u8>,
+        src_file: Option<u8>,
+        is_capture: bool,
+    ) -> Result<Move, &'static str> {
+        let mut candidate_moves = vec![];
+
+        for m in &self.current_legal_moves {
+            if m.piece.piece_type == piece_type
+                && m.dest == dest_coord
+                && m.is_capture == is_capture
+            {
+                candidate_moves.push(m.clone());
+            }
+        }
+
+        match candidate_moves.len() {
+            0 => Err("Illegal move"),
+            1 => {
+                let m = candidate_moves[0];
+                match src_file {
+                    Some(f) => {
+                        if f != m.src.get_file() {
+                            // Since the intended source file does not match that
+                            // of the legal move.
+                            return Err("Illegal move.");
+                        }
+                    }
+                    None => {}
+                }
+
+                match src_rank {
+                    Some(f) => {
+                        if f != m.src.get_rank() {
+                            // Since the intended source rank does not match that
+                            // of the legal move.
+                            return Err("Illegal move.");
+                        }
+                    }
+                    None => {}
+                }
+
+                Ok(m)
+            }
+            _ => {
+                // When there is ambiguity, use the src_rank and src_file
+                // to identify the move
+                if src_file.is_none() && src_rank.is_none() {
+                    return Err("The move is ambiguous.");
+                }
+
+                let src_files: Vec<u8> = candidate_moves.iter().map(|m| m.src.get_file()).collect();
+                let src_ranks: Vec<u8> = candidate_moves.iter().map(|m| m.src.get_rank()).collect();
+
+                // Identify the source of the ambiguity, is it from the rank or file?
+                let file_is_ambiguous = src_files.iter().unique().into_iter().count() != 1;
+                let rank_is_ambiguous = src_ranks.iter().unique().into_iter().count() != 1;
+
+                // If there is ambiguity in both source file and source rank, we expect
+                // the file to be used to disambiguate.
+                if file_is_ambiguous {
+                    match src_file {
+                        Some(src_file) => {
+                            // Identify the move that has the right file
+                            match src_files.into_iter().position(|f| f == src_file) {
+                                Some(idx) => Ok(candidate_moves[idx]),
+                                None => Err("Invalid move: Illegal source square"),
+                            }
+                        }
+                        None => {
+                            return Err("Ambiguity in file of source square");
+                        }
+                    }
+                } else if rank_is_ambiguous {
+                    match src_rank {
+                        Some(src_rank) => {
+                            // Identify the move that has the right rank
+                            match src_ranks.iter().position(|r| *r == src_rank) {
+                                Some(idx) => Ok(candidate_moves[idx]),
+                                None => Err("Invalid move: Illegal source square"),
+                            }
+                        }
+                        None => {
+                            return Err("Ambiguity in rank of source square");
+                        }
+                    }
+                } else {
+                    panic!("Unexpected error: No ambiguity found with multiple candidate moves.");
+                }
+            }
+        }
+    }
+
+    // Prompts the user for a next move
+    // When this method is called, we assume that there
+    // are indeed legal moves in the position.
+    fn get_next_move(&mut self) {
+        loop {
+            let mut move_string = String::new();
+
+            print!("Next move:");
+
+            io::stdout().flush().unwrap();
+
+            match io::stdin().read_line(&mut move_string) {
+                Ok(_) => {
+                    println!();
+
+                    // Remove whitespace
+                    move_string.retain(|c| !c.is_whitespace());
+
+                    let board = self.current_board();
+                    let player_color = board.get_player_color();
+
+                    let m = match move_string.as_ref() {
+                        "O-O" | "0-0" => {
+                            let tmp_m = Move::new_castling(player_color, true);
+
+                            if self.current_legal_moves.contains(&tmp_m) {
+                                tmp_m
+                            } else {
+                                println!("Error: Illegal move.");
+                                continue;
+                            }
+                        }
+                        "O-O-O" | "0-0-0" => {
+                            let tmp_m = Move::new_castling(player_color, false);
+
+                            if self.current_legal_moves.contains(&tmp_m) {
+                                tmp_m
+                            } else {
+                                println!("Error: Illegal move.");
+                                continue;
+                            }
+                        }
+                        _ => {
+                            let (p_type, src_rank, src_file, dest_coord, is_capture) =
+                                match parse_move_string(&move_string) {
+                                    Ok(res) => res,
+                                    Err(_) => {
+                                        println!("Error: {}", move_string);
+                                        continue;
+                                    }
+                                };
+                            match self
+                                .find_legal_move(p_type, dest_coord, src_rank, src_file, is_capture)
+                            {
+                                Ok(m) => m,
+                                Err(e) => {
+                                    println!("Error: {}", e);
+                                    continue;
+                                }
+                            }
+                        }
+                    };
+
+                    let mut new_board = board.clone();
+                    new_board.apply_move(&m);
+                    self.board_history.push(new_board);
+                    self.move_list.push(m);
+                    break;
+                }
+                Err(_) => println!("Invalid move, please try again."),
+            }
+        }
+    }
+
+    fn generate_legal_moves(&mut self) {
+        self.current_legal_moves = generate_legal_moves(self.current_board());
+    }
+
+    pub fn play_game(&mut self) {
+        loop {
+            self.generate_legal_moves();
+            clear_screen();
+            self.print_current_board();
+            self.get_next_move();
+        }
+    }
+}
+
+// Returns the PieceType, an optional source rank, an optional source file,
+// the destination coordinate, a boolean if the move is a capture.
+// This function does not handle castling.
+fn parse_move_string(
+    move_string: &str,
+) -> Result<(PieceType, Option<u8>, Option<u8>, Coordinate, bool), &'static str> {
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"^([NBRQK])?([a-h])?([1-8])?(x)?([a-h])([1-8])(=[NBRQ])?(\+|#)?$").unwrap();
+    }
+
+    match RE.captures(move_string) {
+        Some(caps) => {
+            let piece_type =
+                PieceType::new_from_string(caps.get(1).map_or_else(|| "", |s| s.as_str())).unwrap();
+            let source_file = caps.get(2).map(|f| file_to_index(f.as_str()));
+            let source_rank = caps.get(3).map(|r| r.as_str().parse::<u8>().unwrap());
+            let dest_file = file_to_index(caps.get(5).unwrap().as_str());
+            let dest_rank = caps.get(6).unwrap().as_str().parse::<u8>().unwrap();
+            let dest_coord = Coordinate::new_from_rank_file(dest_rank, dest_file);
+            let is_capture = caps.get(4).is_some();
+
+            // TODO: Handle promotions
+            // TODO: Handle checks and checkmate
+
+            // Pawn captures must specify source file
+            if is_capture && piece_type == PieceType::Pawn && source_file.is_none() {
+                return Err("Invalid move!");
+            }
+
+            Ok((piece_type, source_rank, source_file, dest_coord, is_capture))
+        }
+        None => Err("Invalid move!"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_move_strings() {
+        let test_cases = [
+            (
+                "Nc4",
+                (PieceType::Knight, None, None, Coordinate::C4, false),
+            ),
+            (
+                "Nxc4",
+                (PieceType::Knight, None, None, Coordinate::C4, true),
+            ),
+            (
+                "Nbd7",
+                (PieceType::Knight, None, Some(2), Coordinate::D7, false),
+            ),
+            (
+                "N5d6",
+                (PieceType::Knight, Some(5), None, Coordinate::D6, false),
+            ),
+            (
+                "N5xd6",
+                (PieceType::Knight, Some(5), None, Coordinate::D6, true),
+            ),
+            (
+                "exc5",
+                (PieceType::Pawn, None, Some(5), Coordinate::C5, true),
+            ),
+            (
+                "Bxc5",
+                (PieceType::Bishop, None, None, Coordinate::C5, true),
+            ),
+            ("Qxc5", (PieceType::Queen, None, None, Coordinate::C5, true)),
+            ("Kxc5", (PieceType::King, None, None, Coordinate::C5, true)),
+        ];
+
+        for (move_str, expected_res) in &test_cases {
+            match parse_move_string(move_str) {
+                Ok(res) => {
+                    assert_eq!(*expected_res, res);
+                }
+                Err(_) => panic!("Unable to parse move"),
+            }
+        }
+    }
+
+    #[test]
+    fn parse_invalid_move_strings() {
+        let test_strings = ["Kxf0", "Lxc5", "K6f", "O-O", "O-O-O"];
+
+        for test_string in &test_strings {
+            assert!(parse_move_string(test_string).is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod game_tests {
+    use super::*;
+    use crate::board::*;
+
+    #[test]
+    fn finding_basic_legal_move() {
+        let board = Board::new_empty();
+        let mut game = Game::new(board);
+
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let expected_move = Move::new(Coordinate::E2, Coordinate::F3, piece, false);
+        let alternative_move = Move::new(Coordinate::E2, Coordinate::G4, piece, false);
+
+        game.current_legal_moves = vec![expected_move, alternative_move];
+
+        let found_move = game
+            .find_legal_move(PieceType::Bishop, Coordinate::F3, None, None, false)
+            .unwrap();
+        assert_eq!(found_move, expected_move);
+    }
+
+    #[test]
+    fn finding_illegal_move() {
+        // Verify that if a move is not in the legal move list, we get an error
+        let board = Board::new_empty();
+        let mut game = Game::new(board);
+
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        let move1 = Move::new(Coordinate::E2, Coordinate::F3, piece, false);
+        let move2 = Move::new(Coordinate::E2, Coordinate::G4, piece, false);
+
+        game.current_legal_moves = vec![move1, move2];
+
+        match game.find_legal_move(PieceType::Bishop, Coordinate::E3, None, None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Illegal move");
+            }
+        }
+    }
+
+    #[test]
+    fn finding_move_with_ambiguous_source_knights_on_different_ranks_and_files() {
+        let board = Board::new_empty();
+        let mut game = Game::new(board);
+
+        let knight1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let knight2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let move1 = Move::new(Coordinate::B1, Coordinate::D2, knight1, false);
+        let move2 = Move::new(Coordinate::F3, Coordinate::D2, knight2, false);
+
+        game.current_legal_moves = vec![move1, move2];
+
+        // Without specifying which knight
+        match game.find_legal_move(PieceType::Knight, Coordinate::D2, None, None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "The move is ambiguous.");
+            }
+        }
+
+        // Specifying the rank instead of the file
+        match game.find_legal_move(PieceType::Knight, Coordinate::D2, Some(1), None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Ambiguity in file of source square");
+            }
+        }
+
+        // Specifying the file to disambiguate the move (Nbd2)
+        match game.find_legal_move(PieceType::Knight, Coordinate::D2, None, Some(2), false) {
+            Ok(m) => {
+                assert_eq!(move1, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+
+        // Specifying the file to disambiguate the move (Nfd2)
+        match game.find_legal_move(PieceType::Knight, Coordinate::D2, None, Some(6), false) {
+            Ok(m) => {
+                assert_eq!(move2, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+    }
+
+    #[test]
+    fn finding_move_with_ambiguous_source_rooks_on_the_same_rank() {
+        let board = Board::new_empty();
+        let mut game = Game::new(board);
+
+        let rook1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let rook2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let move1 = Move::new(Coordinate::B2, Coordinate::C2, rook1, false);
+        let move2 = Move::new(Coordinate::D2, Coordinate::C2, rook2, false);
+
+        game.current_legal_moves = vec![move1, move2];
+
+        // Without specifying which rook
+        match game.find_legal_move(PieceType::Rook, Coordinate::C2, None, None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "The move is ambiguous.");
+            }
+        }
+
+        // Specifying rank to disambiguate move
+        match game.find_legal_move(PieceType::Rook, Coordinate::C2, Some(2), None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Ambiguity in file of source square");
+            }
+        }
+
+        // Specifying the file to disambiguate the move (Rbc2)
+        match game.find_legal_move(PieceType::Rook, Coordinate::C2, None, Some(2), false) {
+            Ok(m) => {
+                assert_eq!(move1, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+
+        // Specifying the file to disambiguate the move (Rdc2)
+        match game.find_legal_move(PieceType::Rook, Coordinate::C2, None, Some(4), false) {
+            Ok(m) => {
+                assert_eq!(move2, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+    }
+
+    #[test]
+    fn finding_move_with_ambiguous_source_rooks_on_the_same_file() {
+        let board = Board::new_empty();
+        let mut game = Game::new(board);
+
+        let rook1 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let rook2 = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let move1 = Move::new(Coordinate::B2, Coordinate::B4, rook1, false);
+        let move2 = Move::new(Coordinate::B5, Coordinate::B4, rook2, false);
+
+        game.current_legal_moves = vec![move1, move2];
+
+        // Without specifying which rook
+        match game.find_legal_move(PieceType::Rook, Coordinate::B4, None, None, false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "The move is ambiguous.");
+            }
+        }
+
+        // Specifying file to disambiguate move
+        match game.find_legal_move(PieceType::Rook, Coordinate::B4, None, Some(2), false) {
+            Ok(_) => panic!("Expected an error"),
+            Err(e) => {
+                assert_eq!(e.to_string(), "Ambiguity in rank of source square");
+            }
+        }
+
+        // Specifying the rank to disambiguate the move (R2b4)
+        match game.find_legal_move(PieceType::Rook, Coordinate::B4, Some(2), None, false) {
+            Ok(m) => {
+                assert_eq!(move1, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+
+        // Specifying the rank to disambiguate the move (R5b4)
+        match game.find_legal_move(PieceType::Rook, Coordinate::B4, Some(5), None, false) {
+            Ok(m) => {
+                assert_eq!(move2, m);
+            }
+            Err(_) => {
+                panic!("Did not expect an error");
+            }
+        }
+    }
+}

@@ -1,18 +1,18 @@
-use crate::board::{Coordinate, Piece, PieceType};
+use crate::board::{Color, Coordinate, Piece, PieceType, FILE_LIST};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum CastlingSide {
     Kingside,
     Queenside,
     Unknown,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub struct Move {
     pub src: Coordinate,
     pub dest: Coordinate,
     pub piece: Piece,
-    is_capture: bool,
+    pub is_capture: bool,
     pub castling_side: CastlingSide,
 }
 
@@ -27,12 +27,29 @@ impl Move {
         }
     }
 
-    pub fn new_castling(src: Coordinate, dest: Coordinate, piece: Piece, kingside: bool) -> Self {
+    pub fn new_castling(color: Color, kingside: bool) -> Self {
+        let king_src = match color {
+            Color::White => Coordinate::E1,
+            Color::Black => Coordinate::E8,
+        };
+
+        let king_dest = match (color, kingside) {
+            (Color::White, true) => Coordinate::G1,
+            (Color::White, false) => Coordinate::C1,
+            (Color::Black, true) => Coordinate::G8,
+            (Color::Black, false) => Coordinate::C8,
+        };
+
+        let king = Piece {
+            color,
+            piece_type: PieceType::King,
+        };
+
         Move {
-            src,
-            dest,
-            piece,
+            src: king_src,
+            dest: king_dest,
             is_capture: false,
+            piece: king,
             castling_side: if kingside {
                 CastlingSide::Kingside
             } else {
@@ -48,7 +65,6 @@ impl Move {
             _ => {
                 let capture_string = if self.is_capture {
                     if self.piece.piece_type == PieceType::Pawn {
-                        static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
                         format!("{}x", FILE_LIST[(self.src.get_file() - 1) as usize])
                     } else {
                         "x".to_string()
@@ -111,21 +127,13 @@ mod tests {
 
     #[test]
     fn kingside_castling_algebraic_notation() {
-        let piece = Piece {
-            color: Color::White,
-            piece_type: PieceType::King,
-        };
-        let m = Move::new_castling(Coordinate::E1, Coordinate::G1, piece, true);
+        let m = Move::new_castling(Color::White, true);
         assert_eq!(m.to_algebraic_notation(), "O-O".to_string());
     }
 
     #[test]
     fn queenside_castling_algebraic_notation() {
-        let piece = Piece {
-            color: Color::White,
-            piece_type: PieceType::King,
-        };
-        let m = Move::new_castling(Coordinate::E1, Coordinate::C1, piece, false);
+        let m = Move::new_castling(Color::White, false);
         assert_eq!(m.to_algebraic_notation(), "O-O-O".to_string());
     }
 }

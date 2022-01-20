@@ -263,7 +263,7 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                     && !enemy_controlled_squares.contains(&Coordinate::F1)
                     && !enemy_controlled_squares.contains(&Coordinate::G1)
                 {
-                    res.push(Move::new_castling(src, Coordinate::G1, piece, true));
+                    res.push(Move::new_castling(Color::White, true));
                 }
             }
             Color::Black => {
@@ -277,7 +277,7 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                     && !enemy_controlled_squares.contains(&Coordinate::F8)
                     && !enemy_controlled_squares.contains(&Coordinate::G8)
                 {
-                    res.push(Move::new_castling(src, Coordinate::G8, piece, true));
+                    res.push(Move::new_castling(Color::Black, true));
                 }
             }
         };
@@ -299,7 +299,7 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                     && !enemy_controlled_squares.contains(&Coordinate::C1)
                     && !enemy_controlled_squares.contains(&Coordinate::D1)
                 {
-                    res.push(Move::new_castling(src, Coordinate::C1, piece, false));
+                    res.push(Move::new_castling(Color::White, false));
                 }
             }
             Color::Black => {
@@ -315,7 +315,7 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                     && !enemy_controlled_squares.contains(&Coordinate::C8)
                     && !enemy_controlled_squares.contains(&Coordinate::D8)
                 {
-                    res.push(Move::new_castling(src, Coordinate::C8, piece, false));
+                    res.push(Move::new_castling(Color::Black, false));
                 }
             }
         }
@@ -1168,12 +1168,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E1);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E1,
-            Coordinate::G1,
-            king,
-            true
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::White, true)));
     }
 
     #[test]
@@ -1291,12 +1286,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E1);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E1,
-            Coordinate::C1,
-            king,
-            false
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::White, false)));
     }
 
     #[test]
@@ -1433,12 +1423,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E1);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E1,
-            Coordinate::C1,
-            king,
-            false
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::White, false)));
     }
 
     #[test]
@@ -1490,12 +1475,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E8);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E8,
-            Coordinate::G8,
-            king,
-            true
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::Black, true)));
     }
 
     #[test]
@@ -1517,12 +1497,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E8);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E8,
-            Coordinate::C8,
-            king,
-            false
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::Black, false)));
     }
 
     #[test]
@@ -1755,12 +1730,7 @@ mod test {
         let moves = generate_castling(&board, Coordinate::E8);
 
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&Move::new_castling(
-            Coordinate::E8,
-            Coordinate::C8,
-            king,
-            false
-        )));
+        assert!(moves.contains(&Move::new_castling(Color::Black, false)));
     }
 
     #[test]
@@ -1922,27 +1892,27 @@ mod test {
             color: Color::Black,
             piece_type: PieceType::Rook,
         };
-    
+
         board.place_piece(Coordinate::E4, king);
         board.place_piece(Coordinate::E5, bishop);
-    
+
         // Without the enemy rook, the bishop is free to move.
         let initial_dest_squares = generate_legal_moves(&board)
             .iter()
             .filter(|m| m.piece == bishop)
             .map(|m| m.dest)
             .collect::<Vec<Coordinate>>();
-    
+
         assert!(initial_dest_squares.len() != 0);
-    
+
         board.place_piece(Coordinate::E8, enemy_rook);
-    
+
         let final_dest_squares = generate_legal_moves(&board)
             .iter()
             .filter(|m| m.piece == bishop)
             .map(|m| m.dest)
             .collect::<Vec<Coordinate>>();
-    
+
         // The bishop cannot move at all
         assert_eq!(final_dest_squares.len(), 0);
     }
@@ -1958,7 +1928,7 @@ mod test {
             color: Color::White,
             piece_type: PieceType::Bishop,
         };
-        let knight  = Piece {
+        let knight = Piece {
             color: Color::White,
             piece_type: PieceType::Knight,
         };
