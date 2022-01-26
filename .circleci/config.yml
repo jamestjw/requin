@@ -1,0 +1,27 @@
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - restore_cache:
+          key: requin-cache-{{ arch }}-{{ .Branch }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: Install fmt
+          command: rustup component add rustfmt
+      - run:
+          name: Check formatting
+          command: cargo fmt -- --check
+      - run:
+          name: Stable Build
+          command: cargo build
+      - run:
+          name: Test
+          command: cargo test
+      - save_cache:
+          key: requin-cache-{{ arch }}-{{ .Branch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - "~/.cargo"
+            - "./target"
