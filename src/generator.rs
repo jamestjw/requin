@@ -95,21 +95,44 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
 
     // TODO: Handle illegal board positions, e.g. when pawns are on the last rank
 
-    // Handle captures
-    for side_square in front_square.side_squares() {
-        match board.get_from_coordinate(side_square) {
+    // Handle normal captures
+    for front_side_square in front_square.side_squares() {
+        match board.get_from_coordinate(front_side_square) {
             Some(p) => {
                 if p.color == piece.color.other_color() {
-                    res.push(Move::new(src, side_square, piece, true));
+                    res.push(Move::new(src, front_side_square, piece, true));
                 }
             }
             None => {}
         }
     }
 
-    // TODO: Handle en passant
-
-    // Handle pawn advances
+    // Handle en passant
+    for side_square in src.side_squares() {
+        match board.get_from_coordinate(side_square) {
+            Some(p) => {
+                if p.color == piece.color.other_color() && p.piece_type == PieceType::Pawn {
+                    match board.last_move {
+                        Some(m) => {
+                            if m.dest == side_square && m.piece == p && m.eligible_for_en_passant()
+                            {
+                                let mut en_passant_move = Move::new(
+                                    src,
+                                    side_square.vertical_offset(1, piece.color.is_white()),
+                                    piece,
+                                    true,
+                                );
+                                en_passant_move.is_en_passant = true;
+                                res.push(en_passant_move);
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+            None => {}
+        }
+    }
 
     // If the square in front of the pawn is occupied, it may not advance.
     if board.is_square_occupied(front_square) {
@@ -521,6 +544,106 @@ mod test {
             Move::new(piece_coord, Coordinate::F5, pawn, true),
             Move::new(piece_coord, Coordinate::E5, pawn, false),
         ]));
+    }
+
+    #[test]
+    fn generate_white_legal_en_passant() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let capturable_piece = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E5;
+        let last_move = Move::new(Coordinate::F7, Coordinate::F5, capturable_piece, false);
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::F5, capturable_piece);
+        board.last_move = Some(last_move);
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+        let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F6, pawn, true);
+        expected_en_passant_move.is_en_passant = true;
+
+        assert!(moves.contains(&expected_en_passant_move));
+    }
+
+    #[test]
+    fn white_en_passant_illegal_non_double_advance() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let capturable_piece = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E5;
+        let last_move = Move::new(Coordinate::F6, Coordinate::F5, capturable_piece, false);
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::F5, capturable_piece);
+        board.last_move = Some(last_move);
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        for m in moves {
+            assert!(!m.is_en_passant);
+        }
+    }
+
+    #[test]
+    fn generate_black_legal_en_passant() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let capturable_piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+        let last_move = Move::new(Coordinate::F2, Coordinate::F4, capturable_piece, false);
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::F4, capturable_piece);
+        board.last_move = Some(last_move);
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+        let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F3, pawn, true);
+        expected_en_passant_move.is_en_passant = true;
+
+        assert!(moves.contains(&expected_en_passant_move));
+    }
+
+    #[test]
+    fn black_en_passant_illegal_non_double_advance() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let capturable_piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E4;
+        let last_move = Move::new(Coordinate::F3, Coordinate::F4, capturable_piece, false);
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::F4, capturable_piece);
+        board.last_move = Some(last_move);
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        for m in moves {
+            assert!(!m.is_en_passant);
+        }
     }
 
     #[test]

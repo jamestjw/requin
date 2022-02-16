@@ -13,6 +13,7 @@ pub struct Move {
     pub dest: Coordinate,
     pub piece: Piece,
     pub is_capture: bool,
+    pub is_en_passant: bool,
     pub castling_side: CastlingSide,
 }
 
@@ -24,6 +25,7 @@ impl Move {
             piece,
             is_capture,
             castling_side: CastlingSide::Unknown,
+            is_en_passant: false,
         }
     }
 
@@ -55,7 +57,13 @@ impl Move {
             } else {
                 CastlingSide::Queenside
             },
+            is_en_passant: false,
         }
+    }
+
+    pub fn eligible_for_en_passant(&self) -> bool {
+        // .abs() only works on signed integers
+        self.piece.piece_type == PieceType::Pawn && (self.src as i8 - self.dest as i8).abs() == 16
     }
 
     pub fn to_algebraic_notation(&self) -> String {
@@ -135,5 +143,49 @@ mod tests {
     fn queenside_castling_algebraic_notation() {
         let m = Move::new_castling(Color::White, false);
         assert_eq!(m.to_algebraic_notation(), "O-O-O".to_string());
+    }
+
+    #[test]
+    fn en_passant_eligibility_white() {
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let m = Move::new(Coordinate::E2, Coordinate::E4, piece, false);
+
+        assert!(m.eligible_for_en_passant());
+    }
+
+    #[test]
+    fn en_passant_eligibility_black() {
+        let piece = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let m = Move::new(Coordinate::E7, Coordinate::E5, piece, false);
+
+        assert!(m.eligible_for_en_passant());
+    }
+
+    #[test]
+    fn en_passant_ineligibility_white() {
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let m = Move::new(Coordinate::E5, Coordinate::E6, piece, false);
+
+        assert!(!m.eligible_for_en_passant());
+    }
+
+    #[test]
+    fn en_passant_ineligibility_black() {
+        let piece = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let m = Move::new(Coordinate::E7, Coordinate::E6, piece, false);
+
+        assert!(!m.eligible_for_en_passant());
     }
 }

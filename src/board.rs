@@ -203,6 +203,7 @@ pub struct Board {
     is_game_over: bool,
     player_turn: Color,
     castling_rights: CastlingRights,
+    pub last_move: Option<Move>,
 }
 
 impl Board {
@@ -212,6 +213,7 @@ impl Board {
             is_game_over: false,
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
+            last_move: None,
         }
     }
 
@@ -571,12 +573,18 @@ impl Board {
     // Applies a move to the board
     // This does not check that the move is legal
     pub fn apply_move(&mut self, m: &Move) {
+        let player_color = self.get_from_coordinate(m.src).unwrap().color;
         // Handle a normal move
         if m.castling_side == CastlingSide::Unknown {
             let original_piece = self.pieces[m.src as usize].take();
             self.pieces[m.dest as usize] = original_piece;
+
+            // Remove captured piece during en passant capture
+            if m.is_capture && m.is_en_passant {
+                let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
+                self.pieces[to_remove_square as usize] = None;
+            }
         } else {
-            let player_color = self.get_from_coordinate(m.src).unwrap().color;
             // Handle castling
             let (king_src, king_dest, rook_src, rook_dest) = match player_color {
                 Color::White => {
@@ -625,6 +633,7 @@ impl Board {
         }
 
         self.player_turn = self.get_opposing_player_color();
+        self.last_move = Some(*m);
     }
 
     pub fn get_king_coordinate(&self, color: Color) -> Coordinate {
@@ -651,11 +660,15 @@ pub enum Color {
 
 impl Color {
     pub fn other_color(&self) -> Color {
-        if *self == Color::White {
+        if self.is_white() {
             Color::Black
         } else {
             Color::White
         }
+    }
+
+    pub fn is_white(&self) -> bool {
+        *self == Color::White
     }
 }
 
@@ -837,6 +850,11 @@ impl AdjacencyTable {
     pub fn get(&self, src: Coordinate, dir: Direction) -> Option<Coordinate> {
         self.table[src as usize][dir as usize]
     }
+}
+
+// Converts "a" to 1, "b" to 2 and so on, panics if it gets an invalid string
+pub fn file_to_index(s: &str) -> u8 {
+    (1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()) as u8
 }
 
 #[cfg(test)]
@@ -1280,9 +1298,70 @@ mod board_tests {
         assert_eq!(board.get_from_coordinate(Coordinate::C8).unwrap(), king);
         assert_eq!(board.get_from_coordinate(Coordinate::D8).unwrap(), rook);
     }
-}
 
-// Converts "a" to 1, "b" to 2 and so on, panics if it gets an invalid string
-pub fn file_to_index(s: &str) -> u8 {
-    (1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()) as u8
+    #[test]
+    fn apply_white_en_passant_to_board() {
+        let mut board = Board::new_empty();
+        let white_pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let black_pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+
+        board.place_piece(Coordinate::E5, white_pawn);
+        board.place_piece(Coordinate::F5, black_pawn);
+
+        let mut m = Move::new(Coordinate::E5, Coordinate::F6, white_pawn, true);
+        m.is_en_passant = true;
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        // Check that the white pawn has moved
+        assert!(board.get_from_coordinate(Coordinate::E5).is_none());
+        assert!(board.get_from_coordinate(Coordinate::F5).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::F6).unwrap(),
+            white_pawn
+        );
+    }
+
+    #[test]
+    fn apply_black_en_passant_to_board() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+
+        let white_pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let black_pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+
+        board.place_piece(Coordinate::E4, white_pawn);
+        board.place_piece(Coordinate::F4, black_pawn);
+
+        let mut m = Move::new(Coordinate::F4, Coordinate::E3, black_pawn, true);
+        m.is_en_passant = true;
+
+        assert_eq!(board.get_player_color(), Color::Black);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        // Check that the white pawn has moved
+        assert!(board.get_from_coordinate(Coordinate::F4).is_none());
+        assert!(board.get_from_coordinate(Coordinate::E4).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::E3).unwrap(),
+            black_pawn
+        );
+    }
 }
