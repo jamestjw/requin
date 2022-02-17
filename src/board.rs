@@ -584,6 +584,15 @@ impl Board {
                 let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
                 self.pieces[to_remove_square as usize] = None;
             }
+
+            match m.promotes_to {
+                Some(ppt) => {
+                    let mut promoted_piece = original_piece.unwrap();
+                    promoted_piece.piece_type = ppt;
+                    self.pieces[m.dest as usize] = Some(promoted_piece);
+                }
+                None => {}
+            }
         } else {
             // Handle castling
             let (king_src, king_dest, rook_src, rook_dest) = match player_color {
@@ -1362,6 +1371,73 @@ mod board_tests {
         assert_eq!(
             board.get_from_coordinate(Coordinate::E3).unwrap(),
             black_pawn
+        );
+    }
+
+    #[test]
+    fn apply_promotion_to_board() {
+        let mut board = Board::new_empty();
+
+        let white_pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let white_knight = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+
+        board.place_piece(Coordinate::E7, white_pawn);
+
+        let mut m = Move::new(Coordinate::E7, Coordinate::E8, white_pawn, false);
+        m.promotes_to = Some(PieceType::Knight);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        // Check that the white pawn has moved
+        assert!(board.get_from_coordinate(Coordinate::E7).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::E8).unwrap(),
+            white_knight
+        );
+    }
+
+    #[test]
+    fn apply_promotion_with_captures_to_board() {
+        let mut board = Board::new_empty();
+
+        let white_pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let white_queen = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        let black_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E7, white_pawn);
+        board.place_piece(Coordinate::F8, black_rook);
+
+        let mut m = Move::new(Coordinate::E7, Coordinate::F8, white_pawn, true);
+        m.promotes_to = Some(PieceType::Queen);
+
+        assert_eq!(board.get_player_color(), Color::White);
+
+        board.apply_move(&m);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        // Check that the white pawn has moved
+        assert!(board.get_from_coordinate(Coordinate::E7).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::F8).unwrap(),
+            white_queen
         );
     }
 }

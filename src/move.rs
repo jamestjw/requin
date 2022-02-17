@@ -15,6 +15,8 @@ pub struct Move {
     pub is_capture: bool,
     pub is_en_passant: bool,
     pub castling_side: CastlingSide,
+    pub promotes_to: Option<PieceType>,
+    pub is_promotion: bool,
 }
 
 impl Move {
@@ -26,6 +28,8 @@ impl Move {
             is_capture,
             castling_side: CastlingSide::Unknown,
             is_en_passant: false,
+            promotes_to: None,
+            is_promotion: false,
         }
     }
 
@@ -58,6 +62,8 @@ impl Move {
                 CastlingSide::Queenside
             },
             is_en_passant: false,
+            is_promotion: false,
+            promotes_to: None,
         }
     }
 

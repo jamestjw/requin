@@ -172,18 +172,39 @@ impl Game {
                             }
                         }
                         _ => {
-                            let (p_type, src_rank, src_file, dest_coord, is_capture) =
-                                match parse_move_string(&move_string) {
-                                    Ok(res) => res,
-                                    Err(_) => {
-                                        println!("Error: {}", move_string);
-                                        continue;
-                                    }
-                                };
+                            let (
+                                p_type,
+                                src_rank,
+                                src_file,
+                                dest_coord,
+                                is_capture,
+                                promotion_piece_type,
+                            ) = match parse_move_string(&move_string) {
+                                Ok(res) => res,
+                                Err(_) => {
+                                    println!("Error: {}", move_string);
+                                    continue;
+                                }
+                            };
                             match self
                                 .find_legal_move(p_type, dest_coord, src_rank, src_file, is_capture)
                             {
-                                Ok(m) => m,
+                                Ok(mut m) => {
+                                    if m.is_promotion {
+                                        match promotion_piece_type {
+                                            Some(ppt) => {
+                                                m.promotes_to = Some(ppt);
+                                                m
+                                            }
+                                            None => {
+                                                println!("Error: Promotion piece type unspecified");
+                                                continue;
+                                            }
+                                        }
+                                    } else {
+                                        m
+                                    }
+                                }
                                 Err(e) => {
                                     println!("Error: {}", e);
                                     continue;
@@ -218,11 +239,22 @@ impl Game {
 }
 
 // Returns the PieceType, an optional source rank, an optional source file,
-// the destination coordinate, a boolean if the move is a capture.
+// the destination coordinate, a boolean if the move is a capture and
+// an optional promotion piece type.
 // This function does not handle castling.
 fn parse_move_string(
     move_string: &str,
-) -> Result<(PieceType, Option<u8>, Option<u8>, Coordinate, bool), &'static str> {
+) -> Result<
+    (
+        PieceType,
+        Option<u8>,
+        Option<u8>,
+        Coordinate,
+        bool,
+        Option<PieceType>,
+    ),
+    &'static str,
+> {
     lazy_static! {
         static ref RE: Regex =
             Regex::new(r"^([NBRQK])?([a-h])?([1-8])?(x)?([a-h])([1-8])(=[NBRQ])?(\+|#)?$").unwrap();
@@ -238,8 +270,11 @@ fn parse_move_string(
             let dest_rank = caps.get(6).unwrap().as_str().parse::<u8>().unwrap();
             let dest_coord = Coordinate::new_from_rank_file(dest_rank, dest_file);
             let is_capture = caps.get(4).is_some();
+            let promotion_piece_type = match caps.get(7) {
+                Some(s) => Some(PieceType::new_from_string(&s.as_str()[1..]).unwrap()),
+                None => None,
+            };
 
-            // TODO: Handle promotions
             // TODO: Handle checks and checkmate
 
             // Pawn captures must specify source file
@@ -247,7 +282,14 @@ fn parse_move_string(
                 return Err("Invalid move!");
             }
 
-            Ok((piece_type, source_rank, source_file, dest_coord, is_capture))
+            Ok((
+                piece_type,
+                source_rank,
+                source_file,
+                dest_coord,
+                is_capture,
+                promotion_piece_type,
+            ))
         }
         None => Err("Invalid move!"),
     }
@@ -262,34 +304,76 @@ mod tests {
         let test_cases = [
             (
                 "Nc4",
-                (PieceType::Knight, None, None, Coordinate::C4, false),
+                (PieceType::Knight, None, None, Coordinate::C4, false, None),
             ),
             (
                 "Nxc4",
-                (PieceType::Knight, None, None, Coordinate::C4, true),
+                (PieceType::Knight, None, None, Coordinate::C4, true, None),
             ),
             (
                 "Nbd7",
-                (PieceType::Knight, None, Some(2), Coordinate::D7, false),
+                (
+                    PieceType::Knight,
+                    None,
+                    Some(2),
+                    Coordinate::D7,
+                    false,
+                    None,
+                ),
             ),
             (
                 "N5d6",
-                (PieceType::Knight, Some(5), None, Coordinate::D6, false),
+                (
+                    PieceType::Knight,
+                    Some(5),
+                    None,
+                    Coordinate::D6,
+                    false,
+                    None,
+                ),
             ),
             (
                 "N5xd6",
-                (PieceType::Knight, Some(5), None, Coordinate::D6, true),
+                (PieceType::Knight, Some(5), None, Coordinate::D6, true, None),
             ),
             (
-                "exc5",
-                (PieceType::Pawn, None, Some(5), Coordinate::C5, true),
+                "bxc5",
+                (PieceType::Pawn, None, Some(2), Coordinate::C5, true, None),
             ),
             (
                 "Bxc5",
-                (PieceType::Bishop, None, None, Coordinate::C5, true),
+                (PieceType::Bishop, None, None, Coordinate::C5, true, None),
             ),
-            ("Qxc5", (PieceType::Queen, None, None, Coordinate::C5, true)),
-            ("Kxc5", (PieceType::King, None, None, Coordinate::C5, true)),
+            (
+                "Qxc5",
+                (PieceType::Queen, None, None, Coordinate::C5, true, None),
+            ),
+            (
+                "Kxc5",
+                (PieceType::King, None, None, Coordinate::C5, true, None),
+            ),
+            (
+                "e8=Q",
+                (
+                    PieceType::Pawn,
+                    None,
+                    None,
+                    Coordinate::E8,
+                    false,
+                    Some(PieceType::Queen),
+                ),
+            ),
+            (
+                "exf8=Q",
+                (
+                    PieceType::Pawn,
+                    None,
+                    Some(5),
+                    Coordinate::F8,
+                    true,
+                    Some(PieceType::Queen),
+                ),
+            ),
         ];
 
         for (move_str, expected_res) in &test_cases {

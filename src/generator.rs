@@ -90,10 +90,9 @@ impl KnightMovesTable {
 // Generate all legal moves for a particular pawn
 fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
-    let front_square = src.vertical_offset(1, board.is_white_turn());
+    let piece_color = piece.color;
+    let front_square = src.vertical_offset(1, piece_color.is_white());
     let mut res = vec![];
-
-    // TODO: Handle illegal board positions, e.g. when pawns are on the last rank
 
     // Handle normal captures
     for front_side_square in front_square.side_squares() {
@@ -142,10 +141,19 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     res.push(Move::new(src, front_square, piece, false));
 
     // Check if the pawn is still on its starting square
-    if board.is_white_turn() && src.is_in_rank(2) || !board.is_white_turn() && src.is_in_rank(7) {
+    if piece_color.is_white() && src.is_in_rank(2) || !piece_color.is_white() && src.is_in_rank(7) {
         let dest_square = src.vertical_offset(2, board.is_white_turn());
         if !board.is_square_occupied(dest_square) {
             res.push(Move::new(src, dest_square, piece, false));
+        }
+    }
+
+    // Handle pawn promotions
+    for i in 0..res.len() {
+        let sq = res[i].dest;
+        if piece_color.is_white() && sq.is_in_rank(8) || !piece_color.is_white() && sq.is_in_rank(1)
+        {
+            res[i].is_promotion = true;
         }
     }
 
@@ -644,6 +652,44 @@ mod test {
         for m in moves {
             assert!(!m.is_en_passant);
         }
+    }
+
+    #[test]
+    fn generate_white_promotion() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E7;
+
+        board.place_piece(piece_coord, pawn);
+
+        let mut expected_move = Move::new(piece_coord, Coordinate::E8, pawn, false);
+        expected_move.is_promotion = true;
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        assert!(moves.contains(&expected_move));
+    }
+
+    #[test]
+    fn generate_black_promotion() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let piece_coord = Coordinate::E2;
+
+        board.place_piece(piece_coord, pawn);
+
+        let mut expected_move = Move::new(piece_coord, Coordinate::E1, pawn, false);
+        expected_move.is_promotion = true;
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        assert!(moves.contains(&expected_move));
     }
 
     #[test]
