@@ -37,8 +37,8 @@ impl Game {
         &self,
         piece_type: PieceType,
         dest_coord: Coordinate,
-        src_rank: Option<u8>,
-        src_file: Option<u8>,
+        src_rank: Option<usize>,
+        src_file: Option<usize>,
         is_capture: bool,
     ) -> Result<Move, &'static str> {
         let mut candidate_moves = vec![];
@@ -87,8 +87,10 @@ impl Game {
                     return Err("The move is ambiguous.");
                 }
 
-                let src_files: Vec<u8> = candidate_moves.iter().map(|m| m.src.get_file()).collect();
-                let src_ranks: Vec<u8> = candidate_moves.iter().map(|m| m.src.get_rank()).collect();
+                let src_files: Vec<usize> =
+                    candidate_moves.iter().map(|m| m.src.get_file()).collect();
+                let src_ranks: Vec<usize> =
+                    candidate_moves.iter().map(|m| m.src.get_rank()).collect();
 
                 // Identify the source of the ambiguity, is it from the rank or file?
                 let file_is_ambiguous = src_files.iter().unique().into_iter().count() != 1;
@@ -247,8 +249,8 @@ fn parse_move_string(
 ) -> Result<
     (
         PieceType,
-        Option<u8>,
-        Option<u8>,
+        Option<usize>,
+        Option<usize>,
         Coordinate,
         bool,
         Option<PieceType>,
@@ -265,9 +267,9 @@ fn parse_move_string(
             let piece_type =
                 PieceType::new_from_string(caps.get(1).map_or_else(|| "", |s| s.as_str())).unwrap();
             let source_file = caps.get(2).map(|f| file_to_index(f.as_str()));
-            let source_rank = caps.get(3).map(|r| r.as_str().parse::<u8>().unwrap());
+            let source_rank = caps.get(3).map(|r| r.as_str().parse::<usize>().unwrap());
             let dest_file = file_to_index(caps.get(5).unwrap().as_str());
-            let dest_rank = caps.get(6).unwrap().as_str().parse::<u8>().unwrap();
+            let dest_rank = caps.get(6).unwrap().as_str().parse::<usize>().unwrap();
             let dest_coord = Coordinate::new_from_rank_file(dest_rank, dest_file);
             let is_capture = caps.get(4).is_some();
             let promotion_piece_type = match caps.get(7) {

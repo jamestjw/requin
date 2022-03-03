@@ -18,7 +18,7 @@ impl KnightMovesTable {
         };
 
         for i in 0..64 {
-            let coord = Coordinate::try_from(i as u8).unwrap();
+            let coord = Coordinate::try_from(i as usize).unwrap();
             let rank = coord.get_rank();
             let file = coord.get_file();
 

@@ -7,7 +7,7 @@ use std::slice::Iter;
 
 pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-#[repr(u8)]
+#[repr(usize)]
 #[allow(dead_code)]
 #[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coordinate {
@@ -79,18 +79,18 @@ pub enum Coordinate {
 
 impl Coordinate {
     // Rank is between 1-8, file is between 1-8
-    pub fn new_from_rank_file(rank: u8, file: u8) -> Coordinate {
+    pub fn new_from_rank_file(rank: usize, file: usize) -> Coordinate {
         Coordinate::try_from((rank - 1) * 8 + (file - 1)).unwrap()
     }
 
     // Returns the coordinate of the square some vertical offset
     // from this one. The offset can either be a front or
     // backward offset.
-    pub fn vertical_offset(&self, offset: u8, front: bool) -> Coordinate {
+    pub fn vertical_offset(&self, offset: usize, front: bool) -> Coordinate {
         let offset_val = if front {
-            *self as u8 + 8 * offset
+            *self as usize + 8 * offset
         } else {
-            *self as u8 - 8 * offset
+            *self as usize - 8 * offset
         };
         return Coordinate::try_from(offset_val).expect("Invalid coordinate");
     }
@@ -98,11 +98,11 @@ impl Coordinate {
     // Returns the coordinate of the square some horizontal offset
     // from this one. The offset can either be a left or
     // right offset.
-    pub fn horizontal_offset(&self, offset: u8, left: bool) -> Coordinate {
+    pub fn horizontal_offset(&self, offset: usize, left: bool) -> Coordinate {
         let offset_val = if left {
-            *self as u8 - offset
+            *self as usize - offset
         } else {
-            *self as u8 + offset
+            *self as usize + offset
         };
         return Coordinate::try_from(offset_val).expect("Invalid coordinate");
     }
@@ -112,7 +112,7 @@ impl Coordinate {
     // booleans determine which one of four directions the offset
     // should be.
     pub fn diagonal_offset(&self, front: bool, left: bool) -> Coordinate {
-        let mut offset_val = *self as u8;
+        let mut offset_val = *self as usize;
 
         if !left {
             offset_val += 2
@@ -128,18 +128,18 @@ impl Coordinate {
     }
 
     // Returns value 1..=8 corresponding to the rank of the square
-    pub fn get_rank(&self) -> u8 {
-        (*self as u8 / 8) + 1
+    pub fn get_rank(&self) -> usize {
+        (*self as usize / 8) + 1
     }
 
     // Returns value 1..=8 corresponding to the file of the square
-    pub fn get_file(&self) -> u8 {
-        (*self as u8 % 8) + 1
+    pub fn get_file(&self) -> usize {
+        (*self as usize % 8) + 1
     }
 
     // Returns true if this coordinate is in a certain rank
     // Rank should be between 1 to 8
-    pub fn is_in_rank(&self, rank: u8) -> bool {
+    pub fn is_in_rank(&self, rank: usize) -> bool {
         if rank < 1 || rank > 8 {
             panic!("Invalid parameter passed to `is_in_rank`.");
         }
@@ -149,7 +149,7 @@ impl Coordinate {
 
     // Returns true if this coordinate is in a certain file
     // File should be between 1 to 8
-    pub fn is_in_file(&self, file: u8) -> bool {
+    pub fn is_in_file(&self, file: usize) -> bool {
         if file < 1 || file > 8 {
             panic!("Invalid parameter passed to `is_in_file`.");
         }
@@ -159,7 +159,7 @@ impl Coordinate {
     pub fn side_squares(&self) -> Vec<Coordinate> {
         let mut res = vec![];
         // i8 because the idx could be negative after applying the offset
-        let coord_idx = *self as u8;
+        let coord_idx = *self as usize;
         let row_idx = coord_idx % 8;
 
         if row_idx != 0 {
@@ -480,6 +480,21 @@ impl Board {
         return self.pieces[coordinate as usize];
     }
 
+    pub fn get_all_pieces(&self) -> Vec<(Coordinate, &Piece)> {
+        let mut res = vec![];
+
+        for (coord, piece) in self.pieces.iter().enumerate() {
+            match piece {
+                Some(piece) => {
+                    res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
+                }
+                None => {}
+            }
+        }
+
+        return res;
+    }
+
     pub fn get_player_pieces(&self, color: Color) -> Vec<(Coordinate, &Piece)> {
         let mut res = vec![];
 
@@ -487,7 +502,7 @@ impl Board {
             match piece {
                 Some(piece) => {
                     if color == piece.color {
-                        res.push((Coordinate::try_from(coord as u8).unwrap(), piece));
+                        res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
                     }
                 }
                 None => {}
@@ -650,7 +665,7 @@ impl Board {
             match piece {
                 Some(piece) => {
                     if piece.color == color && piece.piece_type == PieceType::King {
-                        return Coordinate::try_from(i as u8).unwrap();
+                        return Coordinate::try_from(i as usize).unwrap();
                     }
                 }
                 None => {}
@@ -871,8 +886,8 @@ impl AdjacencyTable {
 }
 
 // Converts "a" to 1, "b" to 2 and so on, panics if it gets an invalid string
-pub fn file_to_index(s: &str) -> u8 {
-    (1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()) as u8
+pub fn file_to_index(s: &str) -> usize {
+    1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()
 }
 
 #[cfg(test)]
