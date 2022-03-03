@@ -716,6 +716,15 @@ impl PieceType {
             PieceType::Queen => "Q".to_string(),
         }
     }
+
+    pub fn promotable_piece_types() -> Vec<PieceType> {
+        vec![
+            PieceType::Bishop,
+            PieceType::Knight,
+            PieceType::Rook,
+            PieceType::Queen,
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

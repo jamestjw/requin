@@ -138,22 +138,25 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         return res;
     }
 
-    res.push(Move::new(src, front_square, piece, false));
+    let mut adv_move = Move::new(src, front_square, piece, false);
+    if piece_color.is_white() && front_square.is_in_rank(8)
+        || !piece_color.is_white() && front_square.is_in_rank(1)
+    {
+        adv_move.is_promotion = true;
+        for promotable_piece_type in PieceType::promotable_piece_types() {
+            let mut promotion_move = adv_move.clone();
+            promotion_move.promotes_to = Some(promotable_piece_type);
+            res.push(promotion_move);
+        }
+    } else {
+        res.push(adv_move);
+    }
 
     // Check if the pawn is still on its starting square
     if piece_color.is_white() && src.is_in_rank(2) || !piece_color.is_white() && src.is_in_rank(7) {
         let dest_square = src.vertical_offset(2, board.is_white_turn());
         if !board.is_square_occupied(dest_square) {
             res.push(Move::new(src, dest_square, piece, false));
-        }
-    }
-
-    // Handle pawn promotions
-    for i in 0..res.len() {
-        let sq = res[i].dest;
-        if piece_color.is_white() && sq.is_in_rank(8) || !piece_color.is_white() && sq.is_in_rank(1)
-        {
-            res[i].is_promotion = true;
         }
     }
 
@@ -670,7 +673,10 @@ mod test {
 
         let moves = generate_pawn_moves(&board, piece_coord);
 
-        assert!(moves.contains(&expected_move));
+        for pt in PieceType::promotable_piece_types() {
+            expected_move.promotes_to = Some(pt);
+            assert!(moves.contains(&expected_move));
+        }
     }
 
     #[test]
@@ -689,7 +695,10 @@ mod test {
 
         let moves = generate_pawn_moves(&board, piece_coord);
 
-        assert!(moves.contains(&expected_move));
+        for pt in PieceType::promotable_piece_types() {
+            expected_move.promotes_to = Some(pt);
+            assert!(moves.contains(&expected_move));
+        }
     }
 
     #[test]
