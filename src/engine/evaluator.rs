@@ -145,12 +145,19 @@ fn get_piece_positional_value(color: Color, piece_type: PieceType, coord: Coordi
         PieceType::King => get_king_positional_value(color, coord),
         PieceType::Rook => get_rook_positional_value(color, coord),
         PieceType::Queen => get_queen_positional_value(coord),
-        PieceType::Knight => get_queen_positional_value(coord),
+        PieceType::Knight => get_knight_positional_value(coord),
     }
 }
 
 fn get_piece_value(color: Color, piece_type: PieceType, coord: Coordinate) -> f32 {
-    get_raw_piece_value(piece_type) as f32 + get_piece_positional_value(color, piece_type, coord)
+    let val = get_raw_piece_value(piece_type) as f32
+        + get_piece_positional_value(color, piece_type, coord);
+
+    if color == Color::White {
+        val
+    } else {
+        -val
+    }
 }
 
 pub fn evaluate_board(board: &Board) -> f32 {

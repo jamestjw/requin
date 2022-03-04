@@ -23,7 +23,7 @@ impl Game {
         }
     }
 
-    fn current_board(&self) -> &Board {
+    pub fn current_board(&self) -> &Board {
         // Board history should never be empty
         self.board_history.last().unwrap()
     }
@@ -215,10 +215,7 @@ impl Game {
                         }
                     };
 
-                    let mut new_board = board.clone();
-                    new_board.apply_move(&m);
-                    self.board_history.push(new_board);
-                    self.move_list.push(m);
+                    self.apply_move(m);
                     break;
                 }
                 Err(_) => println!("Invalid move, please try again."),
@@ -237,6 +234,19 @@ impl Game {
             self.print_current_board();
             self.get_next_move();
         }
+    }
+
+    pub fn apply_move(&mut self, m: Move) {
+        let mut new_board = self.current_board().clone();
+        new_board.apply_move(&m);
+        self.board_history.push(new_board);
+        self.move_list.push(m);
+    }
+
+    pub fn undo_move(&mut self) {
+        self.move_list.pop();
+        self.board_history.pop();
+        self.current_legal_moves = vec![];
     }
 }
 

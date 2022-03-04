@@ -1,5 +1,5 @@
 pub mod board;
-pub mod evaluator;
+pub mod engine;
 pub mod game;
 pub mod generator;
 pub mod r#move;
