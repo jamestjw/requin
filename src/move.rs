@@ -86,9 +86,17 @@ impl Move {
                 } else {
                     "".to_string()
                 };
+                let promotion_string = if self.is_promotion && self.promotes_to.is_some() {
+                    format!("={}", self.promotes_to.unwrap().to_algebraic_notation())
+                } else {
+                    "".to_string()
+                };
                 let piece_name = self.piece.piece_type.to_algebraic_notation();
                 let dest_square = self.dest.to_algebraic_notation();
-                format!("{}{}{}", piece_name, capture_string, dest_square)
+                format!(
+                    "{}{}{}{}",
+                    piece_name, capture_string, dest_square, promotion_string
+                )
             }
         }
     }
@@ -137,6 +145,30 @@ mod tests {
         };
         let m = Move::new(Coordinate::E4, Coordinate::F5, piece, true);
         assert_eq!(m.to_algebraic_notation(), "exf5".to_string());
+    }
+
+    #[test]
+    fn pawn_capture_promotion_algebraic_notation() {
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let mut m = Move::new(Coordinate::E7, Coordinate::F8, piece, true);
+        m.is_promotion = true;
+        m.promotes_to = Some(PieceType::Rook);
+        assert_eq!(m.to_algebraic_notation(), "exf8=R".to_string());
+    }
+
+    #[test]
+    fn pawn_promotion_algebraic_notation() {
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let mut m = Move::new(Coordinate::E7, Coordinate::E8, piece, false);
+        m.is_promotion = true;
+        m.promotes_to = Some(PieceType::Queen);
+        assert_eq!(m.to_algebraic_notation(), "e8=Q".to_string());
     }
 
     #[test]

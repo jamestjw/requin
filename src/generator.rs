@@ -99,7 +99,21 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         match board.get_from_coordinate(front_side_square) {
             Some(p) => {
                 if p.color == piece.color.other_color() {
-                    res.push(Move::new(src, front_side_square, piece, true));
+                    let mut capture_move = Move::new(src, front_side_square, piece, true);
+
+                    // Handle possible promotion by capturing
+                    if piece_color.is_white() && front_square.is_in_rank(8)
+                        || !piece_color.is_white() && front_square.is_in_rank(1)
+                    {
+                        capture_move.is_promotion = true;
+                        for promotable_piece_type in PieceType::promotable_piece_types() {
+                            let mut promotion_move = capture_move.clone();
+                            promotion_move.promotes_to = Some(promotable_piece_type);
+                            res.push(promotion_move);
+                        }
+                    } else {
+                        res.push(capture_move);
+                    }
                 }
             }
             None => {}
@@ -138,7 +152,10 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         return res;
     }
 
+    // Handle 1 square pawn advances
     let mut adv_move = Move::new(src, front_square, piece, false);
+
+    // Handle possible promotion by advancing
     if piece_color.is_white() && front_square.is_in_rank(8)
         || !piece_color.is_white() && front_square.is_in_rank(1)
     {
@@ -680,6 +697,33 @@ mod test {
     }
 
     #[test]
+    fn generate_white_capture_with_promotion() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+        let piece_coord = Coordinate::E7;
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::F8, enemy_rook);
+
+        let mut expected_move = Move::new(piece_coord, Coordinate::F8, pawn, true);
+        expected_move.is_promotion = true;
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        for pt in PieceType::promotable_piece_types() {
+            expected_move.promotes_to = Some(pt);
+            assert!(moves.contains(&expected_move));
+        }
+    }
+
+    #[test]
     fn generate_black_promotion() {
         let mut board = Board::new_empty();
         let pawn = Piece {
@@ -691,6 +735,33 @@ mod test {
         board.place_piece(piece_coord, pawn);
 
         let mut expected_move = Move::new(piece_coord, Coordinate::E1, pawn, false);
+        expected_move.is_promotion = true;
+
+        let moves = generate_pawn_moves(&board, piece_coord);
+
+        for pt in PieceType::promotable_piece_types() {
+            expected_move.promotes_to = Some(pt);
+            assert!(moves.contains(&expected_move));
+        }
+    }
+
+    #[test]
+    fn generate_black_capture_with_promotion() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        let enemy_knight = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+        let piece_coord = Coordinate::D2;
+
+        board.place_piece(piece_coord, pawn);
+        board.place_piece(Coordinate::C1, enemy_knight);
+
+        let mut expected_move = Move::new(piece_coord, Coordinate::C1, pawn, true);
         expected_move.is_promotion = true;
 
         let moves = generate_pawn_moves(&board, piece_coord);

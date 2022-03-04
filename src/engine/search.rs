@@ -28,11 +28,12 @@ impl Searcher {
         for m in legal_moves {
             self.game.apply_move(m);
             let curr_eval = if is_white_turn {
-                self.alpha_beta_max(self.search_depth - 1, -10000.0, 10000.0)
-            } else {
                 self.alpha_beta_min(self.search_depth - 1, -10000.0, 10000.0)
+            } else {
+                self.alpha_beta_max(self.search_depth - 1, -10000.0, 10000.0)
             };
             self.game.undo_move();
+
             if (is_white_turn && curr_eval > best_move_eval)
                 || (!is_white_turn && curr_eval < best_move_eval)
             {

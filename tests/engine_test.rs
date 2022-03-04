@@ -154,3 +154,43 @@ fn test_depth_two_best_move_black() {
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
+
+#[test]
+fn test_depth_three_best_move_white() {
+    let mut board = Board::new_empty();
+
+    let white_rook = Piece {
+        color: Color::White,
+        piece_type: PieceType::Rook,
+    };
+    let white_king = Piece {
+        color: Color::White,
+        piece_type: PieceType::King,
+    };
+    let white_pawn = Piece {
+        color: Color::White,
+        piece_type: PieceType::Pawn,
+    };
+    let black_king = Piece {
+        color: Color::Black,
+        piece_type: PieceType::King,
+    };
+    let black_rook = Piece {
+        color: Color::Black,
+        piece_type: PieceType::Rook,
+    };
+
+    // The expected move is Rd8+, followed by promotion
+    board.place_piece(Coordinate::F1, white_king);
+    board.place_piece(Coordinate::A8, black_king);
+    board.place_piece(Coordinate::D2, white_rook);
+    board.place_piece(Coordinate::E7, white_pawn);
+    board.place_piece(Coordinate::E8, black_rook);
+
+    let game = Game::new(board);
+    let mut searcher = Searcher::new(game, 3);
+    let best_move = searcher.best_move();
+    let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook, false);
+
+    assert_eq!(best_move.unwrap(), expected_move);
+}
