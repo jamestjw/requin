@@ -291,8 +291,6 @@ fn generate_king_moves(board: &Board, src: Coordinate, with_castling: bool) -> V
 fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
     let mut res = vec![];
-    let enemy_controlled_squares =
-        generate_players_controlled_squares(board, piece.color.other_color());
 
     // Generate kingside castling
     if board.may_castle(piece.color, true) {
@@ -311,8 +309,11 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
 
                 if board.get_from_coordinate(Coordinate::F1).is_none()
                     && board.get_from_coordinate(Coordinate::G1).is_none()
-                    && !enemy_controlled_squares.contains(&Coordinate::F1)
-                    && !enemy_controlled_squares.contains(&Coordinate::G1)
+                    && !are_squares_controlled_by_player(
+                        board,
+                        piece.color.other_color(),
+                        &[Coordinate::E1, Coordinate::F1, Coordinate::G1],
+                    )
                 {
                     res.push(Move::new_castling(Color::White, true));
                 }
@@ -325,8 +326,11 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                 );
                 if board.get_from_coordinate(Coordinate::F8).is_none()
                     && board.get_from_coordinate(Coordinate::G8).is_none()
-                    && !enemy_controlled_squares.contains(&Coordinate::F8)
-                    && !enemy_controlled_squares.contains(&Coordinate::G8)
+                    && !are_squares_controlled_by_player(
+                        board,
+                        piece.color.other_color(),
+                        &[Coordinate::E8, Coordinate::F8, Coordinate::G8],
+                    )
                 {
                     res.push(Move::new_castling(Color::Black, true));
                 }
@@ -347,8 +351,11 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                 if board.get_from_coordinate(Coordinate::B1).is_none()
                     && board.get_from_coordinate(Coordinate::C1).is_none()
                     && board.get_from_coordinate(Coordinate::D1).is_none()
-                    && !enemy_controlled_squares.contains(&Coordinate::C1)
-                    && !enemy_controlled_squares.contains(&Coordinate::D1)
+                    && !are_squares_controlled_by_player(
+                        board,
+                        piece.color.other_color(),
+                        &[Coordinate::C1, Coordinate::D1, Coordinate::E1],
+                    )
                 {
                     res.push(Move::new_castling(Color::White, false));
                 }
@@ -363,8 +370,11 @@ fn generate_castling(board: &Board, src: Coordinate) -> Vec<Move> {
                 if board.get_from_coordinate(Coordinate::B8).is_none()
                     && board.get_from_coordinate(Coordinate::C8).is_none()
                     && board.get_from_coordinate(Coordinate::D8).is_none()
-                    && !enemy_controlled_squares.contains(&Coordinate::C8)
-                    && !enemy_controlled_squares.contains(&Coordinate::D8)
+                    && !are_squares_controlled_by_player(
+                        board,
+                        piece.color.other_color(),
+                        &[Coordinate::C8, Coordinate::D8, Coordinate::E8],
+                    )
                 {
                     res.push(Move::new_castling(Color::Black, false));
                 }
@@ -388,16 +398,7 @@ fn is_move_legal(board: &Board, color: Color, m: &Move) -> bool {
     board_copy.apply_move(m);
     let king_coord = board_copy.get_king_coordinate(color);
 
-    // Check if the current player's king is in danger
-    let moves = generate_moves(&board_copy);
-
-    for m in moves {
-        if m.dest == king_coord {
-            return false;
-        }
-    }
-
-    true
+    !are_squares_controlled_by_player(&board_copy, color.other_color(), &[king_coord])
 }
 
 // Generate all moves given a certain board
@@ -448,6 +449,7 @@ fn generate_pawn_controlled_squares(board: &Board, src: Coordinate) -> Vec<Coord
 }
 
 // Generate all the squares controlled by a certain player
+// TODO: There is a bug here, pinned pieces control squares too
 pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<Coordinate> {
     let mut res = vec![];
 
@@ -473,6 +475,152 @@ pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<C
 
     // TODO: Remove duplicates
     res
+}
+
+// Check for controlled squares by short circuiting
+pub fn are_squares_controlled_by_player(
+    board: &Board,
+    color: Color,
+    squares: &[Coordinate],
+) -> bool {
+    if squares.len() == 0 {
+        return false;
+    }
+
+    for (coord, piece) in board.get_player_pieces(color) {
+        match piece.piece_type {
+            PieceType::Knight => {
+                if does_knight_control_squares(coord, squares) {
+                    return true;
+                }
+            }
+            PieceType::Bishop => {
+                if does_bishop_style_control_squares(board, coord, squares) {
+                    return true;
+                }
+            }
+            PieceType::Rook => {
+                if does_rook_style_control_squares(board, coord, squares) {
+                    return true;
+                }
+            }
+            PieceType::King => {
+                if does_king_control_squares(coord, squares) {
+                    return true;
+                }
+            }
+            PieceType::Queen => {
+                if does_bishop_style_control_squares(board, coord, squares)
+                    || does_rook_style_control_squares(board, coord, squares)
+                {
+                    return true;
+                }
+            }
+            PieceType::Pawn => {
+                if does_pawn_control_squares(coord, color, squares) {
+                    return true;
+                }
+            }
+        };
+    }
+    false
+}
+
+pub fn does_pawn_control_squares(src: Coordinate, color: Color, squares: &[Coordinate]) -> bool {
+    let directions = match color {
+        Color::White => [Direction::NW, Direction::NE],
+        Color::Black => [Direction::SW, Direction::SE],
+    };
+
+    for direction in &directions {
+        match ADJACENCY_TABLE.get(src, *direction) {
+            Some(dest) => {
+                if squares.contains(&dest) {
+                    return true;
+                }
+            }
+            None => {}
+        }
+    }
+    false
+}
+
+pub fn does_knight_control_squares(src: Coordinate, squares: &[Coordinate]) -> bool {
+    for dest_square in KNIGHT_MOVES_TABLE.get(src) {
+        if squares.contains(&dest_square) {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn does_bishop_style_control_squares(
+    board: &Board,
+    src: Coordinate,
+    target_squares: &[Coordinate],
+) -> bool {
+    for dir in Direction::diagonal_iterator() {
+        let mut curr_square = src;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                if target_squares.contains(&dest_square) {
+                    return true;
+                }
+
+                // Check if square is occupied
+                if board.get_from_coordinate(dest_square).is_some() {
+                    // The bishop may not jump over a piece hence we stop the search
+                    break;
+                } else {
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    false
+}
+
+pub fn does_rook_style_control_squares(
+    board: &Board,
+    src: Coordinate,
+    target_squares: &[Coordinate],
+) -> bool {
+    for dir in Direction::horizontal_vertical_iterator() {
+        let mut curr_square = src;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                if target_squares.contains(&dest_square) {
+                    return true;
+                }
+
+                // Check if square is occupied
+                if board.get_from_coordinate(dest_square).is_some() {
+                    // The rook may not jump over a piece hence we stop the search
+                    break;
+                } else {
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    false
+}
+
+pub fn does_king_control_squares(src: Coordinate, target_squares: &[Coordinate]) -> bool {
+    for dir in Direction::iterator() {
+        if let Some(dest_square) = ADJACENCY_TABLE.get(src, *dir) {
+            if target_squares.contains(&dest_square) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -1462,6 +1610,32 @@ mod test {
     }
 
     #[test]
+    fn generate_white_kingside_castling_while_in_check() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, true);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::H1, rook);
+        board.place_piece(Coordinate::E4, enemy_rook);
+
+        let moves = generate_castling(&board, Coordinate::E1);
+
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
     fn generate_white_kingside_castling_with_pieces_in_the_way() {
         let obstructing_pieces = [
             (
@@ -1676,6 +1850,32 @@ mod test {
     }
 
     #[test]
+    fn generate_white_queenside_castling_while_in_check() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::White, false);
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_bishop = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Bishop,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::A1, rook);
+        board.place_piece(Coordinate::C3, enemy_bishop);
+
+        let moves = generate_castling(&board, Coordinate::E1);
+
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
     #[should_panic]
     fn generate_white_kingside_castling_with_missing_rook() {
         let mut board = Board::new_empty();
@@ -1747,6 +1947,58 @@ mod test {
 
         assert_eq!(moves.len(), 1);
         assert!(moves.contains(&Move::new_castling(Color::Black, false)));
+    }
+
+    #[test]
+    fn generate_black_kingside_castling_while_in_check() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, true);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::H8, rook);
+        board.place_piece(Coordinate::A8, enemy_rook);
+
+        let moves = generate_castling(&board, Coordinate::E8);
+
+        assert_eq!(moves.len(), 0);
+    }
+
+    #[test]
+    fn generate_black_queenside_castling_while_in_check() {
+        let mut board = Board::new_empty();
+        board.enable_castling(Color::Black, false);
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_knight = Piece {
+            color: Color::White,
+            piece_type: PieceType::Knight,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::A8, rook);
+        board.place_piece(Coordinate::C7, enemy_knight);
+
+        let moves = generate_castling(&board, Coordinate::E8);
+
+        assert_eq!(moves.len(), 0);
     }
 
     #[test]
