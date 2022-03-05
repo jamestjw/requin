@@ -32,7 +32,7 @@ fn test_depth_one_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1);
-    let best_move = searcher.best_move();
+    let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::A1, Coordinate::A8, white_rook, true);
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -68,7 +68,7 @@ fn test_depth_one_best_move_black() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1);
-    let best_move = searcher.best_move();
+    let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::A8, Coordinate::A1, black_rook, true);
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -108,7 +108,7 @@ fn test_depth_two_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2);
-    let best_move = searcher.best_move();
+    let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::D4, Coordinate::H4, white_rook, true);
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -149,7 +149,7 @@ fn test_depth_two_best_move_black() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2);
-    let best_move = searcher.best_move();
+    let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::C2, Coordinate::A2, black_rook, true);
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -189,7 +189,7 @@ fn test_depth_three_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3);
-    let best_move = searcher.best_move();
+    let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook, false);
 
     assert_eq!(best_move.unwrap(), expected_move);

@@ -13,3 +13,5 @@ lazy_static = "1.4.0"
 bitfield = "0.13.2"
 regex = "1.5.4"
 itertools = "0.10.3"
+structopt = "0.3.26"
+

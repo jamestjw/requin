@@ -28,7 +28,7 @@ impl Game {
         self.board_history.last().unwrap()
     }
 
-    fn print_current_board(&self) {
+    pub fn print_current_board(&self) {
         self.current_board().print();
     }
 
@@ -134,7 +134,9 @@ impl Game {
     // Prompts the user for a next move
     // When this method is called, we assume that there
     // are indeed legal moves in the position.
-    fn get_next_move(&mut self) {
+    pub fn get_next_move(&mut self) {
+        self.generate_legal_moves();
+
         loop {
             let mut move_string = String::new();
 
@@ -227,9 +229,8 @@ impl Game {
         self.current_legal_moves = generate_legal_moves(self.current_board());
     }
 
-    pub fn play_game(&mut self) {
+    pub fn play_game_no_ai(&mut self) {
         loop {
-            self.generate_legal_moves();
             clear_screen();
             self.print_current_board();
             self.get_next_move();

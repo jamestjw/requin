@@ -656,6 +656,29 @@ impl Board {
             self.disable_castling(player_color, false);
         }
 
+        // Check if move takes away castling rights
+        if m.piece.piece_type == PieceType::King {
+            self.disable_castling(player_color, true);
+            self.disable_castling(player_color, false);
+        } else if m.piece.piece_type == PieceType::Rook {
+            match player_color {
+                Color::White => {
+                    if m.src == Coordinate::A1 {
+                        self.disable_castling(player_color, false);
+                    } else if m.src == Coordinate::H1 {
+                        self.disable_castling(player_color, true);
+                    }
+                }
+                Color::Black => {
+                    if m.src == Coordinate::A8 {
+                        self.disable_castling(player_color, false);
+                    } else if m.src == Coordinate::H8 {
+                        self.disable_castling(player_color, true);
+                    }
+                }
+            }
+        }
+
         self.player_turn = self.get_opposing_player_color();
         self.last_move = Some(*m);
     }
@@ -1463,5 +1486,158 @@ mod board_tests {
             board.get_from_coordinate(Coordinate::F8).unwrap(),
             white_queen
         );
+    }
+
+    #[test]
+    fn white_king_movement_removes_castling_rights() {
+        let mut board = Board::new_empty();
+
+        let white_king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E1, white_king);
+        board.enable_castling(Color::White, true);
+        board.enable_castling(Color::White, false);
+
+        let m = Move::new(Coordinate::E1, Coordinate::E2, white_king, false);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        assert!(board.may_castle(Color::White, true));
+        assert!(board.may_castle(Color::White, false));
+
+        board.apply_move(&m);
+
+        assert!(!board.may_castle(Color::White, true));
+        assert!(!board.may_castle(Color::White, false));
+    }
+
+    #[test]
+    fn white_queens_rook_movement_removes_queenside_castling_rights() {
+        let mut board = Board::new_empty();
+
+        let white_rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::A1, white_rook);
+        board.enable_castling(Color::White, true);
+        board.enable_castling(Color::White, false);
+
+        let m = Move::new(Coordinate::A1, Coordinate::A2, white_rook, false);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        assert!(board.may_castle(Color::White, true));
+        assert!(board.may_castle(Color::White, false));
+
+        board.apply_move(&m);
+
+        assert!(board.may_castle(Color::White, true));
+        assert!(!board.may_castle(Color::White, false));
+    }
+
+    #[test]
+    fn white_kings_rook_movement_removes_kingside_castling_rights() {
+        let mut board = Board::new_empty();
+
+        let white_rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::H1, white_rook);
+        board.enable_castling(Color::White, true);
+        board.enable_castling(Color::White, false);
+
+        let m = Move::new(Coordinate::H1, Coordinate::H2, white_rook, false);
+
+        assert_eq!(board.get_player_color(), Color::White);
+        assert!(board.may_castle(Color::White, true));
+        assert!(board.may_castle(Color::White, false));
+
+        board.apply_move(&m);
+
+        assert!(!board.may_castle(Color::White, true));
+        assert!(board.may_castle(Color::White, false));
+    }
+
+    #[test]
+    fn black_king_movement_removes_castling_rights() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+
+        let black_king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+
+        board.place_piece(Coordinate::E1, black_king);
+        board.enable_castling(Color::Black, true);
+        board.enable_castling(Color::Black, false);
+
+        let m = Move::new(Coordinate::E1, Coordinate::E2, black_king, false);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        assert!(board.may_castle(Color::Black, true));
+        assert!(board.may_castle(Color::Black, false));
+
+        board.apply_move(&m);
+
+        assert!(!board.may_castle(Color::Black, true));
+        assert!(!board.may_castle(Color::Black, false));
+    }
+
+    #[test]
+    fn black_queens_rook_movement_removes_queenside_castling_rights() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+
+        let black_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::A8, black_rook);
+        board.enable_castling(Color::Black, true);
+        board.enable_castling(Color::Black, false);
+
+        let m = Move::new(Coordinate::A8, Coordinate::A7, black_rook, false);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        assert!(board.may_castle(Color::Black, true));
+        assert!(board.may_castle(Color::Black, false));
+
+        board.apply_move(&m);
+
+        assert!(board.may_castle(Color::Black, true));
+        assert!(!board.may_castle(Color::Black, false));
+    }
+
+    #[test]
+    fn black_kings_rook_movement_removes_kingside_castling_rights() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+
+        let black_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::H8, black_rook);
+        board.enable_castling(Color::Black, true);
+        board.enable_castling(Color::Black, false);
+
+        let m = Move::new(Coordinate::H8, Coordinate::H7, black_rook, false);
+
+        assert_eq!(board.get_player_color(), Color::Black);
+        assert!(board.may_castle(Color::Black, true));
+        assert!(board.may_castle(Color::Black, false));
+
+        board.apply_move(&m);
+
+        assert!(!board.may_castle(Color::Black, true));
+        assert!(board.may_castle(Color::Black, false));
     }
 }

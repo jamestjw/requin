@@ -4,7 +4,7 @@ use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 
 pub struct Searcher {
-    game: Game,
+    pub game: Game,
     search_depth: u32,
 }
 
@@ -13,7 +13,7 @@ impl Searcher {
         Searcher { game, search_depth }
     }
 
-    pub fn best_move(&mut self) -> Result<Move, &str> {
+    pub fn get_best_move(&mut self) -> Result<Move, &str> {
         let legal_moves = generate_legal_moves(self.game.current_board());
         let is_white_turn = self.game.current_board().is_white_turn();
 
@@ -41,7 +41,6 @@ impl Searcher {
                 best_move_eval = curr_eval;
             }
         }
-
         Ok(best_move)
     }
 
@@ -92,5 +91,14 @@ impl Searcher {
         }
 
         beta
+    }
+
+    pub fn apply_best_move(&mut self) {
+        match self.get_best_move() {
+            Ok(m) => {
+                self.game.apply_move(m);
+            }
+            Err(e) => panic!("Unable to apply best move. Error: {}", e),
+        }
     }
 }
