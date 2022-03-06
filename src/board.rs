@@ -1,3 +1,4 @@
+use crate::generator::is_square_controlled_by_player;
 use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
@@ -200,7 +201,6 @@ impl CastlingRights {
 #[derive(Clone, Copy)]
 pub struct Board {
     pieces: [Option<Piece>; 64],
-    is_game_over: bool,
     player_turn: Color,
     castling_rights: CastlingRights,
     pub last_move: Option<Move>,
@@ -210,7 +210,6 @@ impl Board {
     pub fn new_empty() -> Board {
         Board {
             pieces: [None; 64],
-            is_game_over: false,
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
             last_move: None,
@@ -696,6 +695,11 @@ impl Board {
         }
 
         panic!("Missing {:?} king on the board", color);
+    }
+
+    pub fn is_in_check(&self) -> bool {
+        let king_coord = self.get_king_coordinate(self.get_player_color());
+        is_square_controlled_by_player(self, self.get_opposing_player_color(), king_coord)
     }
 }
 

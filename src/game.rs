@@ -1,17 +1,34 @@
-use crate::{
-    board::{file_to_index, Board, Coordinate, PieceType},
-    clear_screen,
-};
+use crate::board::{file_to_index, Board, Color, Coordinate, PieceType};
 use crate::{generator::generate_legal_moves, r#move::Move};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::{self, Write};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GameState {
+    InProgress,
+    WhiteWon,
+    BlackWon,
+    Stalemate,
+}
+
+impl GameState {
+    pub fn to_text(&self) -> &str {
+        match self {
+            GameState::InProgress => "Game is in progress",
+            GameState::WhiteWon => "White has won by checkmate",
+            GameState::BlackWon => "Black has won by checkmate",
+            GameState::Stalemate => "Stalemate",
+        }
+    }
+}
+
 pub struct Game {
     move_list: Vec<Move>,
     board_history: Vec<Board>,
     current_legal_moves: Vec<Move>, // Legal moves for the current board
+    pub state: GameState,
 }
 
 impl Game {
@@ -20,6 +37,7 @@ impl Game {
             move_list: vec![],
             board_history: vec![starting_board],
             current_legal_moves: vec![],
+            state: GameState::InProgress,
         }
     }
 
@@ -135,8 +153,6 @@ impl Game {
     // When this method is called, we assume that there
     // are indeed legal moves in the position.
     pub fn get_next_move(&mut self) {
-        self.generate_legal_moves();
-
         loop {
             let mut move_string = String::new();
 
@@ -229,12 +245,9 @@ impl Game {
         self.current_legal_moves = generate_legal_moves(self.current_board());
     }
 
-    pub fn play_game_no_ai(&mut self) {
-        loop {
-            clear_screen();
-            self.print_current_board();
-            self.get_next_move();
-        }
+    // This function should be called before running a game
+    pub fn init_game_board(&mut self) {
+        self.generate_legal_moves();
     }
 
     pub fn apply_move(&mut self, m: Move) {
@@ -242,12 +255,32 @@ impl Game {
         new_board.apply_move(&m);
         self.board_history.push(new_board);
         self.move_list.push(m);
+        self.generate_legal_moves();
+
+        if self.current_legal_moves.len() == 0 {
+            if self.current_board().is_in_check() {
+                match self.current_board().get_player_color() {
+                    Color::White => {
+                        self.state = GameState::BlackWon;
+                    }
+                    Color::Black => {
+                        self.state = GameState::WhiteWon;
+                    }
+                }
+            } else {
+                self.state = GameState::Stalemate;
+            }
+        }
     }
 
     pub fn undo_move(&mut self) {
         self.move_list.pop();
         self.board_history.pop();
         self.current_legal_moves = vec![];
+    }
+
+    pub fn is_game_over(&self) -> bool {
+        self.state != GameState::InProgress
     }
 }
 

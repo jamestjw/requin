@@ -477,7 +477,6 @@ pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<C
     res
 }
 
-// Check for controlled squares by short circuiting
 fn are_squares_controlled_by_player(board: &Board, color: Color, squares: &[Coordinate]) -> bool {
     if squares.len() == 0 {
         return false;
@@ -490,7 +489,7 @@ fn are_squares_controlled_by_player(board: &Board, color: Color, squares: &[Coor
         .unwrap()
 }
 
-fn is_square_controlled_by_player(board: &Board, color: Color, square: Coordinate) -> bool {
+pub fn is_square_controlled_by_player(board: &Board, color: Color, square: Coordinate) -> bool {
     // Explore all directions of attack
 
     is_square_controlled_by_pawn(board, color, square)
