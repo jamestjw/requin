@@ -478,145 +478,116 @@ pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<C
 }
 
 // Check for controlled squares by short circuiting
-pub fn are_squares_controlled_by_player(
-    board: &Board,
-    color: Color,
-    squares: &[Coordinate],
-) -> bool {
+fn are_squares_controlled_by_player(board: &Board, color: Color, squares: &[Coordinate]) -> bool {
     if squares.len() == 0 {
         return false;
     }
 
-    for (coord, piece) in board.get_player_pieces(color) {
-        match piece.piece_type {
-            PieceType::Knight => {
-                if does_knight_control_squares(coord, squares) {
-                    return true;
-                }
-            }
-            PieceType::Bishop => {
-                if does_bishop_style_control_squares(board, coord, squares) {
-                    return true;
-                }
-            }
-            PieceType::Rook => {
-                if does_rook_style_control_squares(board, coord, squares) {
-                    return true;
-                }
-            }
-            PieceType::King => {
-                if does_king_control_squares(coord, squares) {
-                    return true;
-                }
-            }
-            PieceType::Queen => {
-                if does_bishop_style_control_squares(board, coord, squares)
-                    || does_rook_style_control_squares(board, coord, squares)
-                {
-                    return true;
-                }
-            }
-            PieceType::Pawn => {
-                if does_pawn_control_squares(coord, color, squares) {
-                    return true;
-                }
-            }
-        };
-    }
-    false
+    squares
+        .iter()
+        .map(|square| is_square_controlled_by_player(board, color, *square))
+        .reduce(|a, b| a || b)
+        .unwrap()
 }
 
-pub fn does_pawn_control_squares(src: Coordinate, color: Color, squares: &[Coordinate]) -> bool {
+fn is_square_controlled_by_player(board: &Board, color: Color, square: Coordinate) -> bool {
+    // Explore all directions of attack
+
+    is_square_controlled_by_pawn(board, color, square)
+        || is_square_controlled_by_knight(board, color, square)
+        || is_square_controlled_by_bishop_style(board, color, square)
+        || is_square_controlled_by_rook_style(board, color, square)
+        || is_square_controlled_by_king(board, color, square)
+}
+
+// Color is the color of the player doing the controlling
+fn is_square_controlled_by_pawn(board: &Board, color: Color, square: Coordinate) -> bool {
     let directions = match color {
-        Color::White => [Direction::NW, Direction::NE],
-        Color::Black => [Direction::SW, Direction::SE],
+        Color::White => [Direction::SW, Direction::SE],
+        Color::Black => [Direction::NW, Direction::NE],
     };
 
     for direction in &directions {
-        match ADJACENCY_TABLE.get(src, *direction) {
-            Some(dest) => {
-                if squares.contains(&dest) {
+        if let Some(dest) = ADJACENCY_TABLE.get(square, *direction) {
+            if let Some(p) = board.get_from_coordinate(dest) {
+                if p.color == color && p.piece_type == PieceType::Pawn {
                     return true;
                 }
             }
-            None => {}
         }
     }
+
     false
 }
 
-pub fn does_knight_control_squares(src: Coordinate, squares: &[Coordinate]) -> bool {
-    for dest_square in KNIGHT_MOVES_TABLE.get(src) {
-        if squares.contains(&dest_square) {
-            return true;
-        }
-    }
-    false
-}
-
-pub fn does_bishop_style_control_squares(
-    board: &Board,
-    src: Coordinate,
-    target_squares: &[Coordinate],
-) -> bool {
-    for dir in Direction::diagonal_iterator() {
-        let mut curr_square = src;
-
-        loop {
-            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
-                if target_squares.contains(&dest_square) {
-                    return true;
-                }
-
-                // Check if square is occupied
-                if board.get_from_coordinate(dest_square).is_some() {
-                    // The bishop may not jump over a piece hence we stop the search
-                    break;
-                } else {
-                    curr_square = dest_square;
-                }
-            } else {
-                break;
-            }
-        }
-    }
-    false
-}
-
-pub fn does_rook_style_control_squares(
-    board: &Board,
-    src: Coordinate,
-    target_squares: &[Coordinate],
-) -> bool {
-    for dir in Direction::horizontal_vertical_iterator() {
-        let mut curr_square = src;
-
-        loop {
-            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
-                if target_squares.contains(&dest_square) {
-                    return true;
-                }
-
-                // Check if square is occupied
-                if board.get_from_coordinate(dest_square).is_some() {
-                    // The rook may not jump over a piece hence we stop the search
-                    break;
-                } else {
-                    curr_square = dest_square;
-                }
-            } else {
-                break;
-            }
-        }
-    }
-    false
-}
-
-pub fn does_king_control_squares(src: Coordinate, target_squares: &[Coordinate]) -> bool {
-    for dir in Direction::iterator() {
-        if let Some(dest_square) = ADJACENCY_TABLE.get(src, *dir) {
-            if target_squares.contains(&dest_square) {
+pub fn is_square_controlled_by_knight(board: &Board, color: Color, square: Coordinate) -> bool {
+    for dest_square in KNIGHT_MOVES_TABLE.get(square) {
+        if let Some(p) = board.get_from_coordinate(*dest_square) {
+            if p.color == color && p.piece_type == PieceType::Knight {
                 return true;
+            }
+        }
+    }
+    false
+}
+
+fn is_square_controlled_by_bishop_style(board: &Board, color: Color, square: Coordinate) -> bool {
+    for dir in Direction::diagonal_iterator() {
+        let mut curr_square = square;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                if let Some(p) = board.get_from_coordinate(dest_square) {
+                    if p.color == color
+                        && (p.piece_type == PieceType::Bishop || p.piece_type == PieceType::Queen)
+                    {
+                        return true;
+                    }
+                    // Obstruction by non-bishop style piece or piece with the wrong color
+                    break;
+                } else {
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    false
+}
+
+fn is_square_controlled_by_rook_style(board: &Board, color: Color, square: Coordinate) -> bool {
+    for dir in Direction::horizontal_vertical_iterator() {
+        let mut curr_square = square;
+
+        loop {
+            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
+                if let Some(p) = board.get_from_coordinate(dest_square) {
+                    if p.color == color
+                        && (p.piece_type == PieceType::Rook || p.piece_type == PieceType::Queen)
+                    {
+                        return true;
+                    }
+                    // Obstruction by non-rook style piece or piece with the wrong color
+                    break;
+                } else {
+                    curr_square = dest_square;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    false
+}
+
+fn is_square_controlled_by_king(board: &Board, color: Color, square: Coordinate) -> bool {
+    for dir in Direction::iterator() {
+        if let Some(dest_square) = ADJACENCY_TABLE.get(square, *dir) {
+            if let Some(p) = board.get_from_coordinate(dest_square) {
+                if p.color == color && p.piece_type == PieceType::King {
+                    return true;
+                }
             }
         }
     }
@@ -2461,5 +2432,245 @@ mod test {
 
         // Capture the attacking piece
         assert!(moves.contains(&Move::new(Coordinate::A8, Coordinate::E8, rook, true)));
+    }
+
+    #[test]
+    fn squares_controlled_by_white_pawn() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        board.place_piece(Coordinate::E4, pawn);
+
+        assert!(is_square_controlled_by_pawn(
+            &board,
+            Color::White,
+            Coordinate::D5
+        ));
+        assert!(is_square_controlled_by_pawn(
+            &board,
+            Color::White,
+            Coordinate::F5
+        ));
+
+        assert!(!is_square_controlled_by_pawn(
+            &board,
+            Color::White,
+            Coordinate::E5
+        ));
+        assert!(!is_square_controlled_by_pawn(
+            &board,
+            Color::White,
+            Coordinate::D4
+        ));
+        assert!(!is_square_controlled_by_pawn(
+            &board,
+            Color::White,
+            Coordinate::F4
+        ));
+    }
+
+    #[test]
+    fn squares_controlled_by_white_king() {
+        let mut board = Board::new_empty();
+        let pawn = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        board.place_piece(Coordinate::E4, pawn);
+
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::D5
+        ));
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::E5
+        ));
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::F5
+        ));
+
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::D3
+        ));
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::E3
+        ));
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::F3
+        ));
+
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::D4
+        ));
+        assert!(is_square_controlled_by_king(
+            &board,
+            Color::White,
+            Coordinate::F4
+        ));
+    }
+
+    #[test]
+    fn squares_controlled_by_bishop() {
+        let mut board = Board::new_empty();
+        let bishop = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+        board.place_piece(Coordinate::E4, bishop);
+
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::D5
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::C6
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::D3
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::C2
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::F5
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::G6
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::F3
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::B1
+        ));
+
+        let friendly_obstruction = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        board.place_piece(Coordinate::F5, friendly_obstruction);
+
+        assert!(!is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::G6
+        ));
+
+        let enemy_obstruction = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        board.place_piece(Coordinate::C2, enemy_obstruction);
+
+        assert!(!is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::B1
+        ));
+    }
+
+    #[test]
+    fn squares_controlled_by_queen() {
+        let mut board = Board::new_empty();
+        let queen = Piece {
+            color: Color::White,
+            piece_type: PieceType::Queen,
+        };
+        board.place_piece(Coordinate::E4, queen);
+
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::D5
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::C6
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::D3
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::C2
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::F5
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::G6
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::F3
+        ));
+        assert!(is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::B1
+        ));
+
+        let friendly_obstruction = Piece {
+            color: Color::White,
+            piece_type: PieceType::Pawn,
+        };
+        board.place_piece(Coordinate::F5, friendly_obstruction);
+
+        assert!(!is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::G6
+        ));
+
+        let enemy_obstruction = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Pawn,
+        };
+        board.place_piece(Coordinate::C2, enemy_obstruction);
+
+        assert!(!is_square_controlled_by_bishop_style(
+            &board,
+            Color::White,
+            Coordinate::B1
+        ));
     }
 }
