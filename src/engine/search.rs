@@ -1,5 +1,5 @@
 use super::evaluator::evaluate_board;
-use crate::game::Game;
+use crate::game::{Game, GameState};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 
@@ -46,6 +46,12 @@ impl Searcher {
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
     fn alpha_beta_max(&mut self, depth: u32, mut alpha: f32, beta: f32) -> f32 {
+        match self.game.state {
+            GameState::WhiteWon => return 9998.0,
+            GameState::BlackWon => return -9998.0,
+            _ => {}
+        }
+
         if depth == 0 {
             return evaluate_board(self.game.current_board());
         }
@@ -70,6 +76,12 @@ impl Searcher {
     }
 
     fn alpha_beta_min(&mut self, depth: u32, alpha: f32, mut beta: f32) -> f32 {
+        match self.game.state {
+            GameState::WhiteWon => return 9998.0,
+            GameState::BlackWon => return -9998.0,
+            _ => {}
+        }
+
         if depth == 0 {
             return evaluate_board(self.game.current_board());
         }

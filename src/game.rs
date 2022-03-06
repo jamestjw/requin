@@ -277,6 +277,7 @@ impl Game {
         self.move_list.pop();
         self.board_history.pop();
         self.current_legal_moves = vec![];
+        self.state = GameState::InProgress;
     }
 
     pub fn is_game_over(&self) -> bool {
