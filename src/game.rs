@@ -24,6 +24,7 @@ impl GameState {
     }
 }
 
+#[derive(Clone)]
 pub struct Game {
     move_list: Vec<Move>,
     board_history: Vec<Board>,
