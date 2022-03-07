@@ -7,7 +7,7 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(short, long, default_value = "ai")]
     mode: String,
-    #[structopt(short, long, default_value = "1")]
+    #[structopt(short, long, default_value = "3")]
     depth: u32,
 }
 
