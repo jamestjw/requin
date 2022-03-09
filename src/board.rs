@@ -591,7 +591,7 @@ impl Board {
         // Handle a normal move
         if m.castling_side == CastlingSide::Unknown {
             let original_piece = self.pieces[m.src as usize].take();
-            self.pieces[m.dest as usize] = original_piece;
+            let dest_piece = self.pieces[m.dest as usize].replace(original_piece.unwrap());
 
             // Remove captured piece during en passant capture
             if m.is_capture && m.is_en_passant {
@@ -606,6 +606,30 @@ impl Board {
                     self.pieces[m.dest as usize] = Some(promoted_piece);
                 }
                 None => {}
+            }
+
+            // Check if captured piece is a rook to disable castling rights
+            if let Some(dest_piece) = dest_piece {
+                if dest_piece.color == player_color.other_color()
+                    && dest_piece.piece_type == PieceType::Rook
+                {
+                    match player_color {
+                        Color::Black => {
+                            if m.dest == Coordinate::A1 {
+                                self.disable_castling(Color::White, false);
+                            } else if m.dest == Coordinate::H1 {
+                                self.disable_castling(Color::White, true);
+                            }
+                        }
+                        Color::White => {
+                            if m.dest == Coordinate::A8 {
+                                self.disable_castling(Color::Black, false);
+                            } else if m.dest == Coordinate::H8 {
+                                self.disable_castling(Color::Black, true);
+                            }
+                        }
+                    }
+                }
             }
         } else {
             // Handle castling
@@ -1643,5 +1667,121 @@ mod board_tests {
 
         assert!(!board.may_castle(Color::Black, true));
         assert!(board.may_castle(Color::Black, false));
+    }
+
+    #[test]
+    fn capturing_kingside_rook_disables_white_kingside_castling() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::H1, rook);
+        board.place_piece(Coordinate::H8, enemy_rook);
+
+        board.enable_castling(Color::White, true);
+
+        let m = Move::new(Coordinate::H8, Coordinate::H1, enemy_rook, true);
+
+        assert!(board.may_castle(Color::White, true));
+        board.apply_move(&m);
+        assert!(!board.may_castle(Color::White, true));
+    }
+
+    #[test]
+    fn capturing_queenside_rook_disables_white_queenside_castling() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::White,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::A1, rook);
+        board.place_piece(Coordinate::A8, enemy_rook);
+
+        board.enable_castling(Color::White, false);
+
+        let m = Move::new(Coordinate::A8, Coordinate::A1, enemy_rook, true);
+
+        assert!(board.may_castle(Color::White, false));
+        board.apply_move(&m);
+        assert!(!board.may_castle(Color::White, false));
+    }
+
+    #[test]
+    fn capturing_kingside_rook_disables_black_kingside_castling() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::H8, rook);
+        board.place_piece(Coordinate::H1, enemy_rook);
+
+        board.enable_castling(Color::Black, true);
+
+        let m = Move::new(Coordinate::H1, Coordinate::H8, enemy_rook, true);
+
+        assert!(board.may_castle(Color::Black, true));
+        board.apply_move(&m);
+        assert!(!board.may_castle(Color::Black, true));
+    }
+
+    #[test]
+    fn capturing_queenside_rook_disables_black_queenside_castling() {
+        let mut board = Board::new_empty();
+        let king = Piece {
+            color: Color::Black,
+            piece_type: PieceType::King,
+        };
+        let rook = Piece {
+            color: Color::Black,
+            piece_type: PieceType::Rook,
+        };
+        let enemy_rook = Piece {
+            color: Color::White,
+            piece_type: PieceType::Rook,
+        };
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::A8, rook);
+        board.place_piece(Coordinate::A1, enemy_rook);
+
+        board.enable_castling(Color::Black, false);
+
+        let m = Move::new(Coordinate::A1, Coordinate::A8, enemy_rook, true);
+
+        assert!(board.may_castle(Color::Black, false));
+        board.apply_move(&m);
+        assert!(!board.may_castle(Color::Black, false));
     }
 }
