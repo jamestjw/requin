@@ -22,11 +22,11 @@ pub fn clear_screen() {
     print!("{}[2J", 27 as char);
 }
 
-pub fn play_game_ai(ai_starts: bool, depth: u32) {
+pub fn play_game_ai(ai_starts: bool, depth: u32, num_threads: usize) {
     let board = Board::new_starting_pos();
     let mut game = Game::new(board);
     game.init_game_board();
-    let mut searcher = Searcher::new(game, depth);
+    let mut searcher = Searcher::new(game, depth, num_threads);
 
     // 0 implies that it is the AI's turn
     let turn_seq = if ai_starts { [0, 1] } else { [1, 0] };

@@ -3,49 +3,74 @@ use crate::game::{Game, GameState};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 
+use std::sync::mpsc::channel;
+use threadpool::ThreadPool;
+
+#[derive(Clone)]
 pub struct Searcher {
     pub game: Game,
     search_depth: u32,
+    num_threads: usize,
 }
 
 impl Searcher {
-    pub fn new(game: Game, search_depth: u32) -> Self {
-        Searcher { game, search_depth }
+    pub fn new(game: Game, search_depth: u32, num_threads: usize) -> Self {
+        if num_threads <= 0 {
+            panic!("The engine requires at least one thread to run searches.")
+        }
+        Searcher {
+            game,
+            search_depth,
+            num_threads,
+        }
     }
 
     pub fn get_best_move(&mut self) -> Result<Move, &str> {
         let legal_moves = generate_legal_moves(self.game.current_board());
+        let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
 
-        if legal_moves.len() == 0 {
+        if num_legal_moves == 0 {
             return Err("No legal moves available.");
         }
 
-        // Initialise to a high value
-        let mut best_move_eval = if is_white_turn { -9999.0 } else { 9999.0 };
-        let mut best_move = legal_moves[0];
+        let pool = ThreadPool::new(self.num_threads);
+
+        // Workers will send results via tx, main thread
+        // receives results via tx
+        let (tx, rx) = channel();
 
         for m in legal_moves {
-            self.game.apply_move(m);
-            let curr_eval = if is_white_turn {
-                self.alpha_beta_min(self.search_depth - 1, -10000.0, 10000.0)
-            } else {
-                self.alpha_beta_max(self.search_depth - 1, -10000.0, 10000.0)
-            };
-            self.game.undo_move();
-
-            if (is_white_turn && curr_eval > best_move_eval)
-                || (!is_white_turn && curr_eval < best_move_eval)
-            {
-                best_move = m;
-                best_move_eval = curr_eval;
-            }
+            let tx = tx.clone();
+            let mut searcher = self.clone();
+            let search_depth = self.search_depth - 1;
+            searcher.game.apply_move(m);
+            pool.execute(move || {
+                let curr_eval = if is_white_turn {
+                    searcher.alpha_beta_min(search_depth, -10000.0, 10000.0)
+                } else {
+                    searcher.alpha_beta_max(search_depth, -10000.0, 10000.0)
+                };
+                tx.send((m, curr_eval))
+                    .expect("Unexpected error: Main thread is not receiving.");
+            });
         }
-        Ok(best_move)
+
+        // Assuming that all moves are evaluated successfully without fail
+        let mut move_evals: Vec<(Move, f32)> = rx.iter().take(num_legal_moves).collect();
+
+        // Sort by descending order if it is white's turn
+        if is_white_turn {
+            move_evals.sort_by(|(_, e1), (_, e2)| e2.partial_cmp(e1).unwrap());
+        } else {
+            move_evals.sort_by(|(_, e1), (_, e2)| e1.partial_cmp(e2).unwrap());
+        }
+
+        Ok(move_evals[0].0)
     }
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
-    fn alpha_beta_max(&mut self, depth: u32, mut alpha: f32, beta: f32) -> f32 {
+    pub fn alpha_beta_max(&mut self, depth: u32, mut alpha: f32, beta: f32) -> f32 {
         match self.game.state {
             GameState::WhiteWon => return 9998.0,
             GameState::BlackWon => return -9998.0,
@@ -75,7 +100,7 @@ impl Searcher {
         alpha
     }
 
-    fn alpha_beta_min(&mut self, depth: u32, alpha: f32, mut beta: f32) -> f32 {
+    pub fn alpha_beta_min(&mut self, depth: u32, alpha: f32, mut beta: f32) -> f32 {
         match self.game.state {
             GameState::WhiteWon => return 9998.0,
             GameState::BlackWon => return -9998.0,
