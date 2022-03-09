@@ -3,13 +3,26 @@ use requin::{play_game_ai, play_game_pvp};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "requin", about = "A CLI chess program with a chess engine.")]
+#[structopt(
+    name = "requin",
+    about = "A CLI chess program with a chess engine.",
+    version = "1.0.1"
+)]
 struct Opt {
-    #[structopt(short, long, default_value = "ai")]
+    #[structopt(
+        short,
+        long,
+        default_value = "ai",
+        help = "Available game modes: 'ai' or 'pvp'"
+    )]
     mode: String,
     #[structopt(short, long, default_value = "5")]
     depth: u32,
-    #[structopt(long, default_value = "4")]
+    #[structopt(
+        long,
+        default_value = "4",
+        help = "Number of threads to use during move searches"
+    )]
     num_threads: usize,
 }
 
