@@ -177,15 +177,19 @@ impl Coordinate {
     pub fn to_algebraic_notation(&self) -> String {
         format!("{:?}", *self).to_lowercase()
     }
+
+    pub fn rank_difference(&self, coord: Coordinate) -> i8 {
+        return self.get_rank() as i8 - coord.get_rank() as i8;
+    }
 }
 
 bitfield! {
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     struct CastlingRights(u8);
-    get_white_kingside, set_white_kingside: 1;
-    get_white_queenside, set_white_queenside: 2;
-    get_black_kingside, set_black_kingside: 3;
-    get_black_queenside, set_black_queenside: 4;
+    get_white_kingside, set_white_kingside: 0;
+    get_white_queenside, set_white_queenside: 1;
+    get_black_kingside, set_black_kingside: 2;
+    get_black_queenside, set_black_queenside: 3;
 }
 
 impl CastlingRights {
@@ -194,16 +198,16 @@ impl CastlingRights {
     }
 
     pub fn new_with_all_enabled() -> Self {
-        CastlingRights(0b11111111)
+        CastlingRights(0b1111)
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Board {
     pieces: [Option<Piece>; 64],
     player_turn: Color,
     castling_rights: CastlingRights,
-    pub last_move: Option<Move>,
+    en_passant_square: Option<Coordinate>,
 }
 
 impl Board {
@@ -212,7 +216,7 @@ impl Board {
             pieces: [None; 64],
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
-            last_move: None,
+            en_passant_square: None,
         }
     }
 
@@ -222,230 +226,44 @@ impl Board {
         // At the starting position, both players have their castling rights
         board.castling_rights = CastlingRights::new_with_all_enabled();
 
-        board.place_piece(
-            Coordinate::A1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Rook,
-            },
-        );
-        board.place_piece(
-            Coordinate::B1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Knight,
-            },
-        );
-        board.place_piece(
-            Coordinate::C1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Bishop,
-            },
-        );
-        board.place_piece(
-            Coordinate::D1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Queen,
-            },
-        );
-        board.place_piece(
-            Coordinate::E1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::King,
-            },
-        );
-        board.place_piece(
-            Coordinate::F1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Bishop,
-            },
-        );
-        board.place_piece(
-            Coordinate::G1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Knight,
-            },
-        );
-        board.place_piece(
-            Coordinate::H1,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Rook,
-            },
-        );
-        board.place_piece(
-            Coordinate::A2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::B2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::C2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::D2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::E2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::F2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::G2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::H2,
-            Piece {
-                color: Color::White,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::A8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Rook,
-            },
-        );
-        board.place_piece(
-            Coordinate::B8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Knight,
-            },
-        );
-        board.place_piece(
-            Coordinate::C8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Bishop,
-            },
-        );
-        board.place_piece(
-            Coordinate::D8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Queen,
-            },
-        );
-        board.place_piece(
-            Coordinate::E8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::King,
-            },
-        );
-        board.place_piece(
-            Coordinate::F8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Bishop,
-            },
-        );
-        board.place_piece(
-            Coordinate::G8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Knight,
-            },
-        );
-        board.place_piece(
-            Coordinate::H8,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Rook,
-            },
-        );
-        board.place_piece(
-            Coordinate::A7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::B7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::C7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::D7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::E7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::F7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::G7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
-        board.place_piece(
-            Coordinate::H7,
-            Piece {
-                color: Color::Black,
-                piece_type: PieceType::Pawn,
-            },
-        );
+        let pieces = [
+            (Coordinate::A1, Color::White, PieceType::Rook),
+            (Coordinate::B1, Color::White, PieceType::Knight),
+            (Coordinate::C1, Color::White, PieceType::Bishop),
+            (Coordinate::D1, Color::White, PieceType::Queen),
+            (Coordinate::E1, Color::White, PieceType::King),
+            (Coordinate::F1, Color::White, PieceType::Bishop),
+            (Coordinate::G1, Color::White, PieceType::Knight),
+            (Coordinate::H1, Color::White, PieceType::Rook),
+            (Coordinate::A2, Color::White, PieceType::Pawn),
+            (Coordinate::B2, Color::White, PieceType::Pawn),
+            (Coordinate::C2, Color::White, PieceType::Pawn),
+            (Coordinate::D2, Color::White, PieceType::Pawn),
+            (Coordinate::E2, Color::White, PieceType::Pawn),
+            (Coordinate::F2, Color::White, PieceType::Pawn),
+            (Coordinate::G2, Color::White, PieceType::Pawn),
+            (Coordinate::H2, Color::White, PieceType::Pawn),
+            (Coordinate::A8, Color::Black, PieceType::Rook),
+            (Coordinate::B8, Color::Black, PieceType::Knight),
+            (Coordinate::C8, Color::Black, PieceType::Bishop),
+            (Coordinate::D8, Color::Black, PieceType::Queen),
+            (Coordinate::E8, Color::Black, PieceType::King),
+            (Coordinate::F8, Color::Black, PieceType::Bishop),
+            (Coordinate::G8, Color::Black, PieceType::Knight),
+            (Coordinate::H8, Color::Black, PieceType::Rook),
+            (Coordinate::A7, Color::Black, PieceType::Pawn),
+            (Coordinate::B7, Color::Black, PieceType::Pawn),
+            (Coordinate::C7, Color::Black, PieceType::Pawn),
+            (Coordinate::D7, Color::Black, PieceType::Pawn),
+            (Coordinate::E7, Color::Black, PieceType::Pawn),
+            (Coordinate::F7, Color::Black, PieceType::Pawn),
+            (Coordinate::G7, Color::Black, PieceType::Pawn),
+            (Coordinate::H7, Color::Black, PieceType::Pawn),
+        ];
+
+        for (coord, color, piece_type) in pieces {
+            board.place_piece(coord, Piece::new(color, piece_type));
+        }
 
         board
     }
@@ -702,8 +520,18 @@ impl Board {
             }
         }
 
+        // Set en passant square
+        self.en_passant_square = if m.is_pawn_double_advance() {
+            // Get the square 'behind' the pawn
+            match m.piece.color {
+                Color::White => Some(m.dest.vertical_offset(1, false)),
+                Color::Black => Some(m.dest.vertical_offset(1, true)),
+            }
+        } else {
+            None
+        };
+
         self.player_turn = self.get_opposing_player_color();
-        self.last_move = Some(*m);
     }
 
     pub fn get_king_coordinate(&self, color: Color) -> Coordinate {
@@ -724,6 +552,16 @@ impl Board {
     pub fn is_in_check(&self) -> bool {
         let king_coord = self.get_king_coordinate(self.get_player_color());
         is_square_controlled_by_player(self, self.get_opposing_player_color(), king_coord)
+    }
+
+    // If a pawn can capture this square, it means that it is
+    // able to capture en passant
+    pub fn get_en_passant_square(&self) -> Option<Coordinate> {
+        self.en_passant_square
+    }
+
+    pub fn set_en_passant_square(&mut self, coord: Coordinate) {
+        self.en_passant_square = Some(coord);
     }
 }
 
@@ -797,6 +635,12 @@ impl PieceType {
 pub struct Piece {
     pub color: Color,
     pub piece_type: PieceType,
+}
+
+impl Piece {
+    pub fn new(color: Color, piece_type: PieceType) -> Self {
+        Piece { color, piece_type }
+    }
 }
 
 impl fmt::Display for Piece {

@@ -100,6 +100,11 @@ impl Move {
             }
         }
     }
+
+    pub fn is_pawn_double_advance(&self) -> bool {
+        return self.piece.piece_type == PieceType::Pawn
+            && self.dest.rank_difference(self.src).abs() == 2;
+    }
 }
 
 #[cfg(test)]
@@ -184,46 +189,48 @@ mod tests {
     }
 
     #[test]
-    fn en_passant_eligibility_white() {
-        let piece = Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        };
-        let m = Move::new(Coordinate::E2, Coordinate::E4, piece, false);
+    fn pawn_double_advances() {
+        let pawn_advances = [
+            (
+                Move::new(
+                    Coordinate::E2,
+                    Coordinate::E4,
+                    Piece::new(Color::White, PieceType::Pawn),
+                    false,
+                ),
+                true,
+            ),
+            (
+                Move::new(
+                    Coordinate::E2,
+                    Coordinate::E3,
+                    Piece::new(Color::White, PieceType::Pawn),
+                    false,
+                ),
+                false,
+            ),
+            (
+                Move::new(
+                    Coordinate::E7,
+                    Coordinate::E5,
+                    Piece::new(Color::Black, PieceType::Pawn),
+                    false,
+                ),
+                true,
+            ),
+            (
+                Move::new(
+                    Coordinate::E7,
+                    Coordinate::E6,
+                    Piece::new(Color::Black, PieceType::Pawn),
+                    false,
+                ),
+                false,
+            ),
+        ];
 
-        assert!(m.eligible_for_en_passant());
-    }
-
-    #[test]
-    fn en_passant_eligibility_black() {
-        let piece = Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        };
-        let m = Move::new(Coordinate::E7, Coordinate::E5, piece, false);
-
-        assert!(m.eligible_for_en_passant());
-    }
-
-    #[test]
-    fn en_passant_ineligibility_white() {
-        let piece = Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        };
-        let m = Move::new(Coordinate::E5, Coordinate::E6, piece, false);
-
-        assert!(!m.eligible_for_en_passant());
-    }
-
-    #[test]
-    fn en_passant_ineligibility_black() {
-        let piece = Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        };
-        let m = Move::new(Coordinate::E7, Coordinate::E6, piece, false);
-
-        assert!(!m.eligible_for_en_passant());
+        for (pawn_advance, is_double) in pawn_advances {
+            assert_eq!(pawn_advance.is_pawn_double_advance(), is_double);
+        }
     }
 }

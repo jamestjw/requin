@@ -118,32 +118,14 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
             }
             None => {}
         }
-    }
 
-    // Handle en passant
-    for side_square in src.side_squares() {
-        match board.get_from_coordinate(side_square) {
-            Some(p) => {
-                if p.color == piece.color.other_color() && p.piece_type == PieceType::Pawn {
-                    match board.last_move {
-                        Some(m) => {
-                            if m.dest == side_square && m.piece == p && m.eligible_for_en_passant()
-                            {
-                                let mut en_passant_move = Move::new(
-                                    src,
-                                    side_square.vertical_offset(1, piece.color.is_white()),
-                                    piece,
-                                    true,
-                                );
-                                en_passant_move.is_en_passant = true;
-                                res.push(en_passant_move);
-                            }
-                        }
-                        None => {}
-                    }
-                }
+        // Handle en passant
+        if let Some(en_passant_square) = board.get_en_passant_square() {
+            if front_side_square == en_passant_square {
+                let mut en_passant_move = Move::new(src, en_passant_square, piece, true);
+                en_passant_move.is_en_passant = true;
+                res.push(en_passant_move);
             }
-            None => {}
         }
     }
 
@@ -707,8 +689,8 @@ mod test {
         let last_move = Move::new(Coordinate::F7, Coordinate::F5, capturable_piece, false);
 
         board.place_piece(piece_coord, pawn);
-        board.place_piece(Coordinate::F5, capturable_piece);
-        board.last_move = Some(last_move);
+        board.place_piece(Coordinate::F7, capturable_piece);
+        board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
         let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F6, pawn, true);
@@ -732,8 +714,8 @@ mod test {
         let last_move = Move::new(Coordinate::F6, Coordinate::F5, capturable_piece, false);
 
         board.place_piece(piece_coord, pawn);
-        board.place_piece(Coordinate::F5, capturable_piece);
-        board.last_move = Some(last_move);
+        board.place_piece(Coordinate::F6, capturable_piece);
+        board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
 
@@ -757,8 +739,8 @@ mod test {
         let last_move = Move::new(Coordinate::F2, Coordinate::F4, capturable_piece, false);
 
         board.place_piece(piece_coord, pawn);
-        board.place_piece(Coordinate::F4, capturable_piece);
-        board.last_move = Some(last_move);
+        board.place_piece(Coordinate::F2, capturable_piece);
+        board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
         let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F3, pawn, true);
@@ -782,8 +764,8 @@ mod test {
         let last_move = Move::new(Coordinate::F3, Coordinate::F4, capturable_piece, false);
 
         board.place_piece(piece_coord, pawn);
-        board.place_piece(Coordinate::F4, capturable_piece);
-        board.last_move = Some(last_move);
+        board.place_piece(Coordinate::F3, capturable_piece);
+        board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
 
