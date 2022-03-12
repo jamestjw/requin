@@ -3,6 +3,7 @@ pub mod engine;
 pub mod game;
 pub mod generator;
 pub mod r#move;
+pub mod parser;
 
 use board::Board;
 use engine::Searcher;
