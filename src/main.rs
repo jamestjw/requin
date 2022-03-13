@@ -1,4 +1,4 @@
-use requin::{play_game_ai, play_game_pvp};
+use requin::{play_game_ai, play_game_pvp, run_uci};
 
 use structopt::StructOpt;
 
@@ -13,7 +13,7 @@ struct Opt {
         short,
         long,
         default_value = "ai",
-        help = "Available game modes: 'ai' or 'pvp'"
+        help = "Available game modes: 'ai', 'pvp' and 'uci'"
     )]
     mode: String,
     #[structopt(short, long, default_value = "5")]
@@ -32,6 +32,7 @@ fn main() {
     match opt.mode.as_str() {
         "ai" => play_game_ai(false, opt.depth, opt.num_threads),
         "pvp" => play_game_pvp(),
+        "uci" => run_uci(),
         _ => panic!("Invalid game mode."),
     }
 }

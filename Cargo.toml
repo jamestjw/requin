@@ -16,4 +16,4 @@ itertools = "0.10.3"
 structopt = "0.3.26"
 exitcode = "1.1.2"
 threadpool = "1.8.1"
-
+mockall = "0.9.1"
