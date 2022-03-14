@@ -1,5 +1,5 @@
 use super::handler::{Handler, UCIHandler};
-use super::{ArcMutexUCIState, UCIState};
+use super::{ArcMutexUCIState, Output, UCIState};
 use std::error::Error;
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -47,7 +47,7 @@ impl Client {
 
         if let Some(_) = UCI.captures(&cmd) {
             self.handler
-                .handle_uci(Arc::clone(&self.state), std::io::stdout());
+                .handle_uci(Arc::clone(&self.state), Output::new(std::io::stdout()));
         } else if let Some(_) = ISREADY.captures(&cmd) {
             self.handler
                 .handle_isready(Arc::clone(&self.state), std::io::stdout());

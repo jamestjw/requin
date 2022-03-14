@@ -1,7 +1,9 @@
 mod client;
 mod handler;
+mod output;
 
 pub use client::Client;
+pub use output::Output;
 
 use std::sync::{Arc, Mutex};
 
