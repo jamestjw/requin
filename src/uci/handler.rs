@@ -1,4 +1,7 @@
 use super::ArcMutexUCIState;
+use crate::board::Board;
+use crate::parser::parse_fen;
+
 use mockall_double::double;
 use std::io::Write;
 
@@ -43,6 +46,29 @@ mod mockable {
             _output: W,
         ) {
         }
+
+        pub fn handle_position_fen<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+            fen: String,
+            moves: Vec<String>,
+        ) {
+            thread::spawn(move || {
+                position_with_fen(state, output, fen);
+            });
+        }
+
+        pub fn handle_position_startpos<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+            moves: Vec<String>,
+        ) {
+            thread::spawn(move || {
+                position_with_startpos(state, output);
+            });
+        }
     }
 }
 
@@ -62,6 +88,22 @@ fn uci<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W) {
 fn isready<W: Write + Send + 'static>(mut output: W) {
     writeln!(output, "readyok").unwrap();
     output.flush().unwrap();
+}
+
+fn position_with_fen<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W, fen: String) {
+    let board = match parse_fen(fen) {
+        Ok(board) => board,
+        Err(_) => return,
+    };
+
+    let mut state = state.lock().unwrap();
+    state.position = Some(board);
+}
+
+fn position_with_startpos<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W) {
+    let board = Board::new_starting_pos();
+    let mut state = state.lock().unwrap();
+    state.position = Some(board);
 }
 
 #[cfg(test)]

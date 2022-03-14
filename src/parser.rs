@@ -5,7 +5,7 @@ use regex::Regex;
 pub fn parse_fen(fen_str: String) -> Result<Board, &'static str> {
     lazy_static! {
         static ref FEN_REGEX: Regex =
-            Regex::new(r"^\s*([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+)$").unwrap();
+            Regex::new(r"\s*([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+)").unwrap();
     }
 
     match FEN_REGEX.captures(&fen_str) {
