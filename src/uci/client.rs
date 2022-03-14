@@ -48,8 +48,9 @@ impl Client {
     // http://wbec-ridderkerk.nl/html/UCIProtocol.html
     fn handle_command(&mut self, cmd: String) {
         lazy_static! {
-            static ref UCI: Regex = Regex::new(r"uci").unwrap();
-            static ref ISREADY: Regex = Regex::new(r"isready").unwrap();
+            static ref UCI: Regex = Regex::new(r"^uci$").unwrap();
+            static ref ISREADY: Regex = Regex::new(r"^isready$").unwrap();
+            static ref UCINEWGAME: Regex = Regex::new(r"^ucinewgame$").unwrap();
         }
 
         if let Some(_) = UCI.captures(&cmd) {
@@ -58,6 +59,9 @@ impl Client {
         } else if let Some(_) = ISREADY.captures(&cmd) {
             self.handler
                 .handle_isready(Arc::clone(&self.state), Output::new(std::io::stdout()));
+        } else if let Some(_) = UCINEWGAME.captures(&cmd) {
+            self.handler
+                .handle_ucinewgame(Arc::clone(&self.state), Output::new(std::io::stdout()));
         } else {
             // UCI protocol indicate that we should ignore
             // unknown commands
@@ -95,5 +99,16 @@ mod test {
             .returning(|_, _| ());
         let mut client = Client::new_with_handler(mock_handler);
         client.handle_command(String::from("isready"));
+    }
+
+    #[test]
+    fn test_handle_ucinewgame() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_ucinewgame::<Output<std::io::Stdout>>()
+            .times(1)
+            .returning(|_, _| ());
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("ucinewgame"));
     }
 }

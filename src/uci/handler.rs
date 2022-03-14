@@ -36,6 +36,13 @@ mod mockable {
                 isready(output);
             });
         }
+
+        pub fn handle_ucinewgame<W: Write + Send + 'static>(
+            &mut self,
+            _state: ArcMutexUCIState,
+            _output: W,
+        ) {
+        }
     }
 }
 
