@@ -1,4 +1,4 @@
-use super::handler::{Handler, UCIHandler};
+use super::handler::UCIHandler;
 use super::{ArcMutexUCIState, Output, UCIState};
 use std::error::Error;
 use std::io;
@@ -17,6 +17,13 @@ impl Client {
         Client {
             state: Arc::new(Mutex::new(UCIState::new())),
             handler: UCIHandler::new(),
+        }
+    }
+
+    pub fn new_with_handler(handler: UCIHandler) -> Self {
+        Client {
+            state: Arc::new(Mutex::new(UCIState::new())),
+            handler,
         }
     }
 
@@ -50,7 +57,7 @@ impl Client {
                 .handle_uci(Arc::clone(&self.state), Output::new(std::io::stdout()));
         } else if let Some(_) = ISREADY.captures(&cmd) {
             self.handler
-                .handle_isready(Arc::clone(&self.state), std::io::stdout());
+                .handle_isready(Arc::clone(&self.state), Output::new(std::io::stdout()));
         } else {
             // UCI protocol indicate that we should ignore
             // unknown commands
@@ -62,4 +69,31 @@ fn read_stdin() -> Result<String, Box<dyn Error>> {
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer)?;
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_uci() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_uci::<Output<std::io::Stdout>>()
+            .times(1)
+            .returning(|_, _| ());
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("uci"));
+    }
+
+    #[test]
+    fn test_handle_isready() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_isready::<Output<std::io::Stdout>>()
+            .times(1)
+            .returning(|_, _| ());
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("isready"));
+    }
 }

@@ -1,33 +1,46 @@
-use super::{ArcMutexUCIState};
+use super::ArcMutexUCIState;
+use mockall_double::double;
 use std::io::Write;
-use std::thread;
 
-pub trait Handler {
-    fn handle_uci<W: Write + Send + 'static>(&mut self, state: ArcMutexUCIState, output: W);
-    fn handle_isready<W: Write + Send + 'static>(&mut self, state: ArcMutexUCIState, output: W);
-}
+#[allow(dead_code)]
+mod mockable {
+    use super::*;
+    #[cfg(test)]
+    use mockall::automock;
+    use std::thread;
 
-pub struct UCIHandler {}
+    pub struct UCIHandler {}
 
-impl UCIHandler {
-    pub fn new() -> Self {
-        UCIHandler {}
+    #[cfg_attr(test, automock)]
+    impl UCIHandler {
+        pub fn new() -> Self {
+            UCIHandler {}
+        }
+
+        pub fn handle_uci<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+        ) {
+            thread::spawn(move || {
+                uci(state, output);
+            });
+        }
+
+        pub fn handle_isready<W: Write + Send + 'static>(
+            &mut self,
+            _state: ArcMutexUCIState,
+            output: W,
+        ) {
+            thread::spawn(move || {
+                isready(output);
+            });
+        }
     }
 }
 
-impl Handler for UCIHandler {
-    fn handle_uci<W: Write + Send + 'static>(&mut self, state: ArcMutexUCIState, output: W) {
-        thread::spawn(move || {
-            uci(state, output);
-        });
-    }
-
-    fn handle_isready<W: Write + Send + 'static>(&mut self, _state: ArcMutexUCIState, output: W) {
-        thread::spawn(move || {
-            isready(output);
-        });
-    }
-}
+#[double]
+pub use mockable::UCIHandler;
 
 fn uci<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W) {
     let mut state = state.lock().unwrap();
