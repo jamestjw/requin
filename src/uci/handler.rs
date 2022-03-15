@@ -1,8 +1,10 @@
 use super::ArcMutexUCIState;
-use crate::board::Board;
+use crate::board::{Board, Coordinate};
 use crate::parser::parse_fen;
 
+use lazy_static::lazy_static;
 use mockall_double::double;
+use regex::Regex;
 use std::io::Write;
 
 #[allow(dead_code)]
@@ -55,7 +57,7 @@ mod mockable {
             moves: Vec<String>,
         ) {
             thread::spawn(move || {
-                position_with_fen(state, output, fen);
+                position_with_fen(state, output, fen, moves);
             });
         }
 
@@ -66,7 +68,7 @@ mod mockable {
             moves: Vec<String>,
         ) {
             thread::spawn(move || {
-                position_with_startpos(state, output);
+                position_with_startpos(state, output, moves);
             });
         }
     }
@@ -90,20 +92,56 @@ fn isready<W: Write + Send + 'static>(mut output: W) {
     output.flush().unwrap();
 }
 
-fn position_with_fen<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W, fen: String) {
+fn position_with_fen<W: Write + Send + 'static>(
+    state: ArcMutexUCIState,
+    _output: W,
+    fen: String,
+    moves: Vec<String>,
+) {
     let board = match parse_fen(fen) {
         Ok(board) => board,
         Err(_) => return,
     };
+    apply_moves_and_set_state::<W>(state, board, moves);
+}
 
+fn position_with_startpos<W: Write + Send + 'static>(
+    state: ArcMutexUCIState,
+    _output: W,
+    moves: Vec<String>,
+) {
+    let board = Board::new_starting_pos();
+    apply_moves_and_set_state::<W>(state, board, moves);
+}
+
+fn apply_moves_and_set_state<W: Write + Send + 'static>(
+    state: ArcMutexUCIState,
+    mut board: Board,
+    moves: Vec<String>,
+) {
     let mut state = state.lock().unwrap();
+
+    for m in moves {
+        let (src, dest) = split_move_string_to_src_dest(&m);
+        // We try to apply as many moves as possible
+        match board.apply_move_with_src_dest(src, dest) {
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
     state.position = Some(board);
 }
 
-fn position_with_startpos<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W) {
-    let board = Board::new_starting_pos();
-    let mut state = state.lock().unwrap();
-    state.position = Some(board);
+fn split_move_string_to_src_dest(s: &str) -> (Coordinate, Coordinate) {
+    lazy_static! {
+        static ref MOVE_STRING_REGEX: Regex = Regex::new(r"^([a-h][1-8])([a-h][1-8])$").unwrap();
+    }
+    let m = MOVE_STRING_REGEX.captures(s).unwrap();
+
+    (
+        Coordinate::new_from_algebraic_notation(&m[1]),
+        Coordinate::new_from_algebraic_notation(&m[2]),
+    )
 }
 
 #[cfg(test)]
@@ -136,5 +174,72 @@ mod test {
             std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
             "readyok\n"
         );
+    }
+
+    #[test]
+    fn handle_position_startpos_with_no_moves() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        position_with_startpos(state.clone(), output_buffer.clone(), vec![]);
+
+        assert_eq!(
+            state.lock().unwrap().position.unwrap(),
+            Board::new_starting_pos()
+        );
+    }
+
+    #[test]
+    fn handle_position_startpos_with_moves() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        position_with_startpos(
+            state.clone(),
+            output_buffer.clone(),
+            vec![String::from("e2e4"), String::from("e7e5")],
+        );
+
+        let board = state.lock().unwrap().position.unwrap();
+
+        assert!(board.get_from_coordinate(Coordinate::E2).is_none());
+        assert!(board.get_from_coordinate(Coordinate::E7).is_none());
+        assert!(board.get_from_coordinate(Coordinate::E4).is_some());
+        assert!(board.get_from_coordinate(Coordinate::E5).is_some());
+    }
+
+    #[test]
+    fn handle_position_fen_with_no_moves() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        position_with_fen(
+            state.clone(),
+            output_buffer.clone(),
+            String::from("8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40"),
+            vec![],
+        );
+
+        let expected_board =
+            crate::parser::parse_fen(String::from("8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40"))
+                .unwrap();
+
+        assert_eq!(state.lock().unwrap().position.unwrap(), expected_board);
+    }
+
+    #[test]
+    fn handle_position_fen_with_moves() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        position_with_fen(
+            state.clone(),
+            output_buffer.clone(),
+            String::from("8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40"),
+            vec![String::from("f4g3"), String::from("e6e4")],
+        );
+
+        let expected_board =
+            crate::parser::parse_fen(String::from("8/8/5p2/5P2/1PP1R1P1/6kP/1P1r4/7K b - - 0 41"))
+                .unwrap();
+        let board = state.lock().unwrap().position.unwrap();
+
+        assert_eq!(expected_board, board);
     }
 }

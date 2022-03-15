@@ -84,6 +84,13 @@ impl Coordinate {
         Coordinate::try_from((rank - 1) * 8 + (file - 1)).unwrap()
     }
 
+    pub fn new_from_algebraic_notation(s: &str) -> Coordinate {
+        let file = file_to_index(&s.chars().nth(0).unwrap().to_string());
+        let rank = s.chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
+
+        Coordinate::new_from_rank_file(rank, file)
+    }
+
     // Returns the coordinate of the square some vertical offset
     // from this one. The offset can either be a front or
     // backward offset.
@@ -180,6 +187,10 @@ impl Coordinate {
 
     pub fn rank_difference(&self, coord: Coordinate) -> i8 {
         return self.get_rank() as i8 - coord.get_rank() as i8;
+    }
+
+    pub fn file_difference(&self, coord: Coordinate) -> i8 {
+        return self.get_file() as i8 - coord.get_file() as i8;
     }
 }
 
@@ -532,6 +543,45 @@ impl Board {
         };
 
         self.player_turn = self.get_opposing_player_color();
+    }
+
+    pub fn apply_move_with_src_dest(
+        &mut self,
+        src: Coordinate,
+        dest: Coordinate,
+    ) -> Result<(), &'static str> {
+        let src_piece = match self.get_from_coordinate(src) {
+            Some(p) => p,
+            None => return Err("Missing piece on source square"),
+        };
+        let (is_capture, is_en_passant) = match self.get_from_coordinate(dest) {
+            Some(p) => {
+                if p.color == src_piece.color {
+                    return Err("Illegal capture");
+                }
+                (true, false)
+            }
+            None => {
+                // Check for en passant
+                match self.en_passant_square {
+                    Some(eps) => {
+                        if src_piece.piece_type == PieceType::Pawn && dest == eps {
+                            (true, true)
+                        } else {
+                            (false, false)
+                        }
+                    }
+                    None => (false, false),
+                }
+            }
+        };
+
+        // TODO: Verify if the piece is allowed to move from
+        // src to dest
+        let mut m = Move::new(src, dest, src_piece, is_capture);
+        m.is_en_passant = is_en_passant;
+        self.apply_move(&m);
+        Ok(())
     }
 
     pub fn get_king_coordinate(&self, color: Color) -> Coordinate {
@@ -1627,5 +1677,59 @@ mod board_tests {
         assert!(board.may_castle(Color::Black, false));
         board.apply_move(&m);
         assert!(!board.may_castle(Color::Black, false));
+    }
+
+    #[test]
+    fn apply_simple_move_with_src_dest() {
+        let mut board = Board::new_empty();
+        let piece = Piece {
+            color: Color::White,
+            piece_type: PieceType::Bishop,
+        };
+
+        board.place_piece(Coordinate::E4, piece);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E4, Coordinate::H7)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E4).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::H7).unwrap(), piece);
+    }
+
+    #[test]
+    fn apply_capture_move_with_src_dest() {
+        let mut board = Board::new_empty();
+        let piece = Piece::new(Color::White, PieceType::Knight);
+        let enemy_piece = Piece::new(Color::Black, PieceType::Pawn);
+
+        board.place_piece(Coordinate::E4, piece);
+        board.place_piece(Coordinate::F6, enemy_piece);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E4, Coordinate::F6)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E4).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::F6).unwrap(), piece);
+    }
+
+    #[test]
+    fn apply_en_passant_capture_move_with_src_dest() {
+        let mut board = Board::new_empty();
+        let piece = Piece::new(Color::White, PieceType::Pawn);
+        let enemy_piece = Piece::new(Color::Black, PieceType::Pawn);
+
+        board.place_piece(Coordinate::E5, piece);
+        board.place_piece(Coordinate::D5, enemy_piece);
+        board.set_en_passant_square(Coordinate::D6);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E5, Coordinate::D6)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E5).is_none());
+        assert!(board.get_from_coordinate(Coordinate::D5).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::D6).unwrap(), piece);
     }
 }
