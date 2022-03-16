@@ -55,7 +55,7 @@ impl Client {
                 r"position fen (([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+))(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?"
             ).unwrap();
             static ref POSITION_WITH_STARTPOS: Regex = Regex::new(r"position startpos(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?").unwrap();
-            static ref GO: Regex = Regex::new(r"position startpos").unwrap();
+            static ref GO: Regex = Regex::new(r"go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
         }
 
         if let Some(_) = UCI.captures(&cmd) {
@@ -95,6 +95,13 @@ impl Client {
                 Arc::clone(&self.state),
                 Output::new(std::io::stdout()),
                 moves,
+            );
+        } else if let Some(m) = GO.captures(&cmd) {
+            let args = m.get(1).map_or("", |v| v.as_str()).to_string();
+            self.handler.handle_go(
+                Arc::clone(&self.state),
+                Output::new(std::io::stdout()),
+                args,
             );
         } else {
             // UCI protocol indicate that we should ignore
@@ -244,5 +251,56 @@ mod test {
 
         let mut client = Client::new_with_handler(mock_handler);
         client.handle_command(String::from("position startpos moves"));
+    }
+
+    #[test]
+    fn test_handle_go_no_args() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_go::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from("")),
+            )
+            .times(1)
+            .returning(|_, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("go"));
+    }
+
+    #[test]
+    fn test_handle_go_infinite() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_go::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from(" infinite")),
+            )
+            .times(1)
+            .returning(|_, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("go infinite"));
+    }
+
+    #[test]
+    fn test_handle_go_multiples_args() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_go::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from(" depth 5 movestogo 5 nodes 1")),
+            )
+            .times(1)
+            .returning(|_, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(String::from("go depth 5 movestogo 5 nodes 1"));
     }
 }

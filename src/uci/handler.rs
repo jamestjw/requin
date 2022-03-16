@@ -71,6 +71,17 @@ mod mockable {
                 position_with_startpos(state, output, moves);
             });
         }
+
+        pub fn handle_go<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+            args_str: String,
+        ) {
+            thread::spawn(move || {
+                go(state, output, args_str);
+            });
+        }
     }
 }
 
@@ -113,6 +124,8 @@ fn position_with_startpos<W: Write + Send + 'static>(
     let board = Board::new_starting_pos();
     apply_moves_and_set_state::<W>(state, board, moves);
 }
+
+fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W, args_str: String) {}
 
 fn apply_moves_and_set_state<W: Write + Send + 'static>(
     state: ArcMutexUCIState,
