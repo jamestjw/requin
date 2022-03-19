@@ -1,10 +1,10 @@
-use super::ArcMutexUCIState;
+use super::{ArcMutexUCIState, GoArgs};
 use crate::board::{Board, Coordinate};
+use crate::engine::Searcher;
+use crate::game::Game;
 use crate::parser::parse_fen;
 
-use lazy_static::lazy_static;
 use mockall_double::double;
-use regex::Regex;
 use std::io::Write;
 
 #[allow(dead_code)]
@@ -56,9 +56,9 @@ mod mockable {
             fen: String,
             moves: Vec<String>,
         ) {
-            thread::spawn(move || {
-                position_with_fen(state, output, fen, moves);
-            });
+            // This cannot be done asynchronously since
+            // users expect this to be instant
+            position_with_fen(state, output, fen, moves);
         }
 
         pub fn handle_position_startpos<W: Write + Send + 'static>(
@@ -67,9 +67,9 @@ mod mockable {
             output: W,
             moves: Vec<String>,
         ) {
-            thread::spawn(move || {
-                position_with_startpos(state, output, moves);
-            });
+            // This cannot be done asynchronously since
+            // users expect this to be instant
+            position_with_startpos(state, output, moves);
         }
 
         pub fn handle_go<W: Write + Send + 'static>(
@@ -80,6 +80,26 @@ mod mockable {
         ) {
             thread::spawn(move || {
                 go(state, output, args_str);
+            });
+        }
+
+        pub fn handle_stop<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+        ) {
+            thread::spawn(move || {
+                stop(state, output);
+            });
+        }
+
+        pub fn handle_ponderhit<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+        ) {
+            thread::spawn(move || {
+                ponderhit(state, output);
             });
         }
     }
@@ -125,7 +145,44 @@ fn position_with_startpos<W: Write + Send + 'static>(
     apply_moves_and_set_state::<W>(state, board, moves);
 }
 
-fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, _output: W, args_str: String) {}
+fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_str: String) {
+    let mut state = state.lock().unwrap();
+    state.go_args = Some(GoArgs::new_from_args_str(args_str));
+
+    let pos = match state.position {
+        Some(pos) => pos,
+        None => {
+            let board = Board::new_starting_pos();
+            state.position = Some(board);
+            board
+        }
+    };
+
+    // TODO: Read from go args when the engine is
+    // capable of early stopping
+    let mut searcher = Searcher::new(Game::new(pos), 5, 16);
+
+    match searcher.get_best_move() {
+        Ok(best_move) => {
+            writeln!(
+                output,
+                "bestmove {}",
+                best_move.to_long_algebraic_notation()
+            )
+            .unwrap();
+            output.flush().unwrap();
+        }
+        Err(e) => panic!("Unexpected error during move search: {}", e),
+    }
+}
+
+fn stop<W: Write + Send + 'static>(_state: ArcMutexUCIState, _output: W) {
+    // TODO: Implement early stopping
+}
+
+fn ponderhit<W: Write + Send + 'static>(_state: ArcMutexUCIState, _output: W) {
+    // TODO: Implement early stopping
+}
 
 fn apply_moves_and_set_state<W: Write + Send + 'static>(
     state: ArcMutexUCIState,
@@ -135,26 +192,16 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
     let mut state = state.lock().unwrap();
 
     for m in moves {
-        let (src, dest) = split_move_string_to_src_dest(&m);
+        let (src, dest) = Coordinate::new_from_long_algebraic_notation(&m);
         // We try to apply as many moves as possible
         match board.apply_move_with_src_dest(src, dest) {
             Ok(_) => {}
-            Err(_) => break,
+            Err(_) => {
+                break;
+            }
         }
     }
     state.position = Some(board);
-}
-
-fn split_move_string_to_src_dest(s: &str) -> (Coordinate, Coordinate) {
-    lazy_static! {
-        static ref MOVE_STRING_REGEX: Regex = Regex::new(r"^([a-h][1-8])([a-h][1-8])$").unwrap();
-    }
-    let m = MOVE_STRING_REGEX.captures(s).unwrap();
-
-    (
-        Coordinate::new_from_algebraic_notation(&m[1]),
-        Coordinate::new_from_algebraic_notation(&m[2]),
-    )
 }
 
 #[cfg(test)]

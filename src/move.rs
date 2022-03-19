@@ -101,6 +101,20 @@ impl Move {
         }
     }
 
+    pub fn to_long_algebraic_notation(&self) -> String {
+        let promotion_string = if self.is_promotion && self.promotes_to.is_some() {
+            self.promotes_to
+                .unwrap()
+                .to_algebraic_notation()
+                .to_lowercase()
+        } else {
+            "".to_string()
+        };
+        let src_square = self.src.to_algebraic_notation();
+        let dest_square = self.dest.to_algebraic_notation();
+        format!("{}{}{}", src_square, dest_square, promotion_string)
+    }
+
     pub fn is_pawn_double_advance(&self) -> bool {
         return self.piece.piece_type == PieceType::Pawn
             && self.dest.rank_difference(self.src).abs() == 2;
@@ -232,5 +246,70 @@ mod tests {
         for (pawn_advance, is_double) in pawn_advances {
             assert_eq!(pawn_advance.is_pawn_double_advance(), is_double);
         }
+    }
+
+    #[test]
+    fn simple_long_algebraic_notation() {
+        let moves = [
+            (
+                Move::new(
+                    Coordinate::E4,
+                    Coordinate::F5,
+                    Piece::new(Color::White, PieceType::Pawn),
+                    true,
+                ),
+                "e4f5",
+            ),
+            (
+                Move::new(
+                    Coordinate::E7,
+                    Coordinate::E6,
+                    Piece::new(Color::Black, PieceType::Pawn),
+                    false,
+                ),
+                "e7e6",
+            ),
+            (
+                Move::new(
+                    Coordinate::G1,
+                    Coordinate::F3,
+                    Piece::new(Color::White, PieceType::Knight),
+                    false,
+                ),
+                "g1f3",
+            ),
+        ];
+
+        for (m, notation) in moves {
+            assert_eq!(m.to_long_algebraic_notation(), notation);
+        }
+    }
+
+    #[test]
+    fn test_castling_long_algebraic_notation() {
+        let moves = [
+            (Move::new_castling(Color::White, true), "e1g1"),
+            (Move::new_castling(Color::Black, true), "e8g8"),
+            (Move::new_castling(Color::White, false), "e1c1"),
+            (Move::new_castling(Color::Black, false), "e8c8"),
+        ];
+
+        for (m, notation) in moves {
+            assert_eq!(m.to_long_algebraic_notation(), notation);
+        }
+    }
+
+    #[test]
+    fn test_promotion_long_algebraic_notation() {
+        let mut m = Move::new(
+            Coordinate::E7,
+            Coordinate::F8,
+            Piece::new(Color::White, PieceType::Pawn),
+            true,
+        );
+        m.is_promotion = true;
+        m.promotes_to = Some(PieceType::Rook);
+
+        assert_eq!(m.to_long_algebraic_notation(), "e7f8r");
     }
 }

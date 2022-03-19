@@ -6,6 +6,8 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::slice::Iter;
 
+use regex::Regex;
+
 pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 #[repr(usize)]
@@ -89,6 +91,19 @@ impl Coordinate {
         let rank = s.chars().nth(1).unwrap().to_digit(10).unwrap() as usize;
 
         Coordinate::new_from_rank_file(rank, file)
+    }
+
+    pub fn new_from_long_algebraic_notation(s: &str) -> (Coordinate, Coordinate) {
+        lazy_static! {
+            static ref MOVE_STRING_REGEX: Regex =
+                Regex::new(r"^([a-h][1-8])([a-h][1-8])$").unwrap();
+        }
+        let m = MOVE_STRING_REGEX.captures(s).unwrap();
+
+        (
+            Coordinate::new_from_algebraic_notation(&m[1]),
+            Coordinate::new_from_algebraic_notation(&m[2]),
+        )
     }
 
     // Returns the coordinate of the square some vertical offset

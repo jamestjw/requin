@@ -36,7 +36,7 @@ impl Client {
     fn get_and_run_command(&mut self) {
         match read_stdin() {
             Ok(cmd) => {
-                self.handle_command(cmd);
+                self.handle_command(cmd.trim_end());
             }
             Err(e) => {
                 panic!("Unable to get command from stdin: {}", e);
@@ -46,16 +46,18 @@ impl Client {
 
     // Implement UCI protocol base on
     // http://wbec-ridderkerk.nl/html/UCIProtocol.html
-    fn handle_command(&mut self, cmd: String) {
+    fn handle_command(&mut self, cmd: &str) {
         lazy_static! {
             static ref UCI: Regex = Regex::new(r"^uci$").unwrap();
-            static ref ISREADY: Regex = Regex::new(r"^isready$").unwrap();
-            static ref UCINEWGAME: Regex = Regex::new(r"^ucinewgame$").unwrap();
+            static ref ISREADY: Regex = Regex::new(r"^isready").unwrap();
+            static ref UCINEWGAME: Regex = Regex::new(r"^ucinewgame").unwrap();
             static ref POSITION_WITH_FEN: Regex = Regex::new(
-                r"position fen (([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+))(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?"
+                r"^position fen (([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+))(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?"
             ).unwrap();
             static ref POSITION_WITH_STARTPOS: Regex = Regex::new(r"position startpos(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?").unwrap();
-            static ref GO: Regex = Regex::new(r"go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
+            static ref GO: Regex = Regex::new(r"^go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
+            static ref STOP: Regex = Regex::new(r"^stop").unwrap();
+            static ref PONDERHIT: Regex = Regex::new(r"^ponderhit").unwrap();
         }
 
         if let Some(_) = UCI.captures(&cmd) {
@@ -103,6 +105,12 @@ impl Client {
                 Output::new(std::io::stdout()),
                 args,
             );
+        } else if let Some(_) = STOP.captures(&cmd) {
+            self.handler
+                .handle_stop(Arc::clone(&self.state), Output::new(std::io::stdout()));
+        } else if let Some(_) = PONDERHIT.captures(&cmd) {
+            self.handler
+                .handle_ponderhit(Arc::clone(&self.state), Output::new(std::io::stdout()));
         } else {
             // UCI protocol indicate that we should ignore
             // unknown commands
@@ -130,7 +138,7 @@ mod test {
             .times(1)
             .returning(|_, _| ());
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("uci"));
+        client.handle_command("uci");
     }
 
     #[test]
@@ -141,7 +149,7 @@ mod test {
             .times(1)
             .returning(|_, _| ());
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("isready"));
+        client.handle_command("isready");
     }
 
     #[test]
@@ -152,7 +160,7 @@ mod test {
             .times(1)
             .returning(|_, _| ());
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("ucinewgame"));
+        client.handle_command("ucinewgame");
     }
 
     #[test]
@@ -170,9 +178,7 @@ mod test {
             .returning(|_, _, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from(
-            "position fen 8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40",
-        ));
+        client.handle_command("position fen 8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40");
     }
 
     #[test]
@@ -192,9 +198,9 @@ mod test {
             .returning(|_, _, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from(
+        client.handle_command(
             "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 moves e2e4 e7e6",
-        ));
+        );
     }
 
     #[test]
@@ -214,9 +220,9 @@ mod test {
             .returning(|_, _, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from(
+        client.handle_command(
             "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 moves",
-        ));
+        );
     }
 
     #[test]
@@ -233,7 +239,7 @@ mod test {
             .returning(|_, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("position startpos moves e2e4 e7e6"));
+        client.handle_command("position startpos moves e2e4 e7e6");
     }
 
     #[test]
@@ -250,7 +256,7 @@ mod test {
             .returning(|_, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("position startpos moves"));
+        client.handle_command("position startpos moves");
     }
 
     #[test]
@@ -267,7 +273,7 @@ mod test {
             .returning(|_, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("go"));
+        client.handle_command("go");
     }
 
     #[test]
@@ -284,7 +290,7 @@ mod test {
             .returning(|_, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("go infinite"));
+        client.handle_command("go infinite");
     }
 
     #[test]
@@ -301,6 +307,51 @@ mod test {
             .returning(|_, _, _| ());
 
         let mut client = Client::new_with_handler(mock_handler);
-        client.handle_command(String::from("go depth 5 movestogo 5 nodes 1"));
+        client.handle_command("go depth 5 movestogo 5 nodes 1");
+    }
+
+    #[test]
+    fn test_handle_go_multiples_args_with_moves() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_go::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from(
+                    " depth 5 movestogo 5 searchmoves e2e4 d2d4 nodes 1",
+                )),
+            )
+            .times(1)
+            .returning(|_, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command("go depth 5 movestogo 5 searchmoves e2e4 d2d4 nodes 1");
+    }
+
+    #[test]
+    fn test_handle_stop() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_stop::<Output<std::io::Stdout>>()
+            .with(predicate::always(), predicate::always())
+            .times(1)
+            .returning(|_, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command("stop");
+    }
+
+    #[test]
+    fn test_handle_ponderhit() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_ponderhit::<Output<std::io::Stdout>>()
+            .with(predicate::always(), predicate::always())
+            .times(1)
+            .returning(|_, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command("ponderhit");
     }
 }
