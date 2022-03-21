@@ -58,6 +58,7 @@ impl Client {
             static ref GO: Regex = Regex::new(r"^go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
             static ref STOP: Regex = Regex::new(r"^stop").unwrap();
             static ref PONDERHIT: Regex = Regex::new(r"^ponderhit").unwrap();
+            static ref QUIT: Regex = Regex::new(r"^quit").unwrap();
         }
 
         if let Some(_) = UCI.captures(&cmd) {
@@ -111,6 +112,8 @@ impl Client {
         } else if let Some(_) = PONDERHIT.captures(&cmd) {
             self.handler
                 .handle_ponderhit(Arc::clone(&self.state), Output::new(std::io::stdout()));
+        } else if let Some(_) = QUIT.captures(&cmd) {
+            std::process::exit(exitcode::OK);
         } else {
             // UCI protocol indicate that we should ignore
             // unknown commands
