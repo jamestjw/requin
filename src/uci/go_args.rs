@@ -1,8 +1,8 @@
-use crate::board::Coordinate;
+use crate::board::{Coordinate, PieceType};
 
 #[allow(dead_code)]
 pub struct GoArgs {
-    pub search_moves: Option<Vec<(Coordinate, Coordinate)>>,
+    pub search_moves: Option<Vec<(Coordinate, Coordinate, Option<PieceType>)>>,
     pub ponder: bool,
     pub wtime: Option<u32>,
     pub btime: Option<u32>,
@@ -137,8 +137,8 @@ mod test {
         assert_eq!(
             args.search_moves,
             Some(vec![
-                (Coordinate::E2, Coordinate::E4),
-                (Coordinate::D2, Coordinate::D4)
+                (Coordinate::E2, Coordinate::E4, None),
+                (Coordinate::D2, Coordinate::D4, None)
             ])
         );
     }
@@ -149,8 +149,8 @@ mod test {
         assert_eq!(
             args.search_moves,
             Some(vec![
-                (Coordinate::E2, Coordinate::E4),
-                (Coordinate::D2, Coordinate::D4)
+                (Coordinate::E2, Coordinate::E4, None),
+                (Coordinate::D2, Coordinate::D4, None)
             ])
         );
         assert_eq!(args.depth, 5000);

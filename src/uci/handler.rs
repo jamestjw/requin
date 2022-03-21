@@ -192,9 +192,9 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
     let mut state = state.lock().unwrap();
 
     for m in moves {
-        let (src, dest) = Coordinate::new_from_long_algebraic_notation(&m);
+        let (src, dest, promotes_to) = Coordinate::new_from_long_algebraic_notation(&m);
         // We try to apply as many moves as possible
-        match board.apply_move_with_src_dest(src, dest) {
+        match board.apply_move_with_src_dest(src, dest, promotes_to) {
             Ok(_) => {}
             Err(e) => {
                 println!("Illegal move {}. Error: {}", m, e);

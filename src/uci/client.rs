@@ -52,9 +52,9 @@ impl Client {
             static ref ISREADY: Regex = Regex::new(r"^isready").unwrap();
             static ref UCINEWGAME: Regex = Regex::new(r"^ucinewgame").unwrap();
             static ref POSITION_WITH_FEN: Regex = Regex::new(
-                r"^position fen (([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+))(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?"
+                r"^position fen (([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+))(\s+moves ([a-h][1-8][a-h][1-8][nbrq]?(\s[a-h][1-8][a-h][1-8][nbrq]?)*))?"
             ).unwrap();
-            static ref POSITION_WITH_STARTPOS: Regex = Regex::new(r"position startpos(\s+moves ([a-h][1-8][a-h][1-8](\s[a-h][1-8][a-h][1-8])*))?").unwrap();
+            static ref POSITION_WITH_STARTPOS: Regex = Regex::new(r"position startpos(\s+moves ([a-h][1-8][a-h][1-8][nbrq]?(\s[a-h][1-8][a-h][1-8][nbrq]?)*))?").unwrap();
             static ref GO: Regex = Regex::new(r"^go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
             static ref STOP: Regex = Regex::new(r"^stop").unwrap();
             static ref PONDERHIT: Regex = Regex::new(r"^ponderhit").unwrap();
@@ -207,6 +207,33 @@ mod test {
     }
 
     #[test]
+    fn test_handle_position_with_full_fen_and_moves_with_promotion() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_position_fen::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from(
+                    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                )),
+                predicate::eq(vec![
+                    String::from("e2e4"),
+                    String::from("e7e6"),
+                    String::from("g7g8q"),
+                    String::from("c2c1r"),
+                ]),
+            )
+            .times(1)
+            .returning(|_, _, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command(
+            "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 moves e2e4 e7e6 g7g8q c2c1r",
+        );
+    }
+
+    #[test]
     fn test_handle_position_with_full_fen_and_empty_moves() {
         let mut mock_handler = UCIHandler::default();
         mock_handler
@@ -243,6 +270,28 @@ mod test {
 
         let mut client = Client::new_with_handler(mock_handler);
         client.handle_command("position startpos moves e2e4 e7e6");
+    }
+
+    #[test]
+    fn test_handle_position_with_startpos_and_moves_with_promotion() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_position_startpos::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(vec![
+                    String::from("e2e4"),
+                    String::from("e7e6"),
+                    String::from("g7g8q"),
+                    String::from("g7f8r"),
+                ]),
+            )
+            .times(1)
+            .returning(|_, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command("position startpos moves e2e4 e7e6 g7g8q g7f8r");
     }
 
     #[test]

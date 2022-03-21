@@ -93,16 +93,22 @@ impl Coordinate {
         Coordinate::new_from_rank_file(rank, file)
     }
 
-    pub fn new_from_long_algebraic_notation(s: &str) -> (Coordinate, Coordinate) {
+    pub fn new_from_long_algebraic_notation(
+        s: &str,
+    ) -> (Coordinate, Coordinate, Option<PieceType>) {
         lazy_static! {
             static ref MOVE_STRING_REGEX: Regex =
-                Regex::new(r"^([a-h][1-8])([a-h][1-8])$").unwrap();
+                Regex::new(r"^([a-h][1-8])([a-h][1-8])([nbrq])?$").unwrap();
         }
         let m = MOVE_STRING_REGEX.captures(s).unwrap();
+        let promotion_piece_type = m
+            .get(3)
+            .map(|p| PieceType::new_from_string(p.as_str()).unwrap());
 
         (
             Coordinate::new_from_algebraic_notation(&m[1]),
             Coordinate::new_from_algebraic_notation(&m[2]),
+            promotion_piece_type,
         )
     }
 
@@ -564,6 +570,7 @@ impl Board {
         &mut self,
         src: Coordinate,
         dest: Coordinate,
+        promotes_to: Option<PieceType>,
     ) -> Result<(), &'static str> {
         let src_piece = match self.get_from_coordinate(src) {
             Some(p) => p,
@@ -595,6 +602,7 @@ impl Board {
         // src to dest
         let mut m = Move::new(src, dest, src_piece, is_capture);
         m.is_en_passant = is_en_passant;
+        m.promotes_to = promotes_to;
 
         // Check for castling
         if src_piece.piece_type == PieceType::King && src.file_difference(dest).abs() == 2 {
@@ -675,11 +683,11 @@ pub enum PieceType {
 impl PieceType {
     pub fn new_from_string(s: &str) -> Result<Self, &'static str> {
         let res = match s {
-            "B" => PieceType::Bishop,
-            "N" => PieceType::Knight,
-            "R" => PieceType::Rook,
-            "K" => PieceType::King,
-            "Q" => PieceType::Queen,
+            "B" | "b" => PieceType::Bishop,
+            "N" | "n" => PieceType::Knight,
+            "R" | "r" => PieceType::Rook,
+            "K" | "k" => PieceType::King,
+            "Q" | "q" => PieceType::Queen,
             "" => PieceType::Pawn,
             _ => return Err("Invalid piece type."),
         };
@@ -1717,7 +1725,7 @@ mod board_tests {
         board.place_piece(Coordinate::E4, piece);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E4, Coordinate::H7)
+            .apply_move_with_src_dest(Coordinate::E4, Coordinate::H7, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E4).is_none());
@@ -1734,7 +1742,7 @@ mod board_tests {
         board.place_piece(Coordinate::F6, enemy_piece);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E4, Coordinate::F6)
+            .apply_move_with_src_dest(Coordinate::E4, Coordinate::F6, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E4).is_none());
@@ -1752,7 +1760,7 @@ mod board_tests {
         board.set_en_passant_square(Coordinate::D6);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E5, Coordinate::D6)
+            .apply_move_with_src_dest(Coordinate::E5, Coordinate::D6, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E5).is_none());
@@ -1770,7 +1778,7 @@ mod board_tests {
         board.place_piece(Coordinate::H1, rook);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E1, Coordinate::G1)
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::G1, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E1).is_none());
@@ -1789,7 +1797,7 @@ mod board_tests {
         board.place_piece(Coordinate::A1, rook);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E1, Coordinate::C1)
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::C1, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E1).is_none());
@@ -1808,7 +1816,7 @@ mod board_tests {
         board.place_piece(Coordinate::H8, rook);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E8, Coordinate::G8)
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::G8, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E8).is_none());
@@ -1827,12 +1835,30 @@ mod board_tests {
         board.place_piece(Coordinate::A8, rook);
 
         assert!(board
-            .apply_move_with_src_dest(Coordinate::E8, Coordinate::C8)
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::C8, None)
             .is_ok());
 
         assert!(board.get_from_coordinate(Coordinate::E8).is_none());
         assert!(board.get_from_coordinate(Coordinate::A8).is_none());
         assert_eq!(board.get_from_coordinate(Coordinate::C8).unwrap(), king);
         assert_eq!(board.get_from_coordinate(Coordinate::D8).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_promotion_with_src_dest() {
+        let mut board = Board::new_empty();
+        let piece = Piece::new(Color::White, PieceType::Pawn);
+
+        board.place_piece(Coordinate::E7, piece);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E7, Coordinate::E8, Some(PieceType::Knight))
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E7).is_none());
+        assert_eq!(
+            board.get_from_coordinate(Coordinate::E8).unwrap(),
+            Piece::new(Color::White, PieceType::Knight)
+        );
     }
 }
