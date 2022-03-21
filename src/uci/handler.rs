@@ -196,7 +196,8 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
         // We try to apply as many moves as possible
         match board.apply_move_with_src_dest(src, dest) {
             Ok(_) => {}
-            Err(_) => {
+            Err(e) => {
+                println!("Illegal move {}. Error: {}", m, e);
                 break;
             }
         }

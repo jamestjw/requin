@@ -595,6 +595,18 @@ impl Board {
         // src to dest
         let mut m = Move::new(src, dest, src_piece, is_capture);
         m.is_en_passant = is_en_passant;
+
+        // Check for castling
+        if src_piece.piece_type == PieceType::King && src.file_difference(dest).abs() == 2 {
+            // Assume that we have a legal move and skip other checks for
+            // performance
+            let is_kingside = dest.get_file() == 7;
+            m.castling_side = if is_kingside {
+                CastlingSide::Kingside
+            } else {
+                CastlingSide::Queenside
+            };
+        }
         self.apply_move(&m);
         Ok(())
     }
@@ -1746,5 +1758,81 @@ mod board_tests {
         assert!(board.get_from_coordinate(Coordinate::E5).is_none());
         assert!(board.get_from_coordinate(Coordinate::D5).is_none());
         assert_eq!(board.get_from_coordinate(Coordinate::D6).unwrap(), piece);
+    }
+
+    #[test]
+    fn apply_white_kingside_castling_with_src_dest() {
+        let mut board = Board::new_empty();
+        let king = Piece::new(Color::White, PieceType::King);
+        let rook = Piece::new(Color::White, PieceType::Rook);
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::H1, rook);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::G1)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E1).is_none());
+        assert!(board.get_from_coordinate(Coordinate::H1).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::G1).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::F1).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_white_queenside_castling_with_src_dest() {
+        let mut board = Board::new_empty();
+        let king = Piece::new(Color::White, PieceType::King);
+        let rook = Piece::new(Color::White, PieceType::Rook);
+
+        board.place_piece(Coordinate::E1, king);
+        board.place_piece(Coordinate::A1, rook);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::C1)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E1).is_none());
+        assert!(board.get_from_coordinate(Coordinate::A1).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::C1).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::D1).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_black_kingside_castling_with_src_dest() {
+        let mut board = Board::new_empty();
+        let king = Piece::new(Color::Black, PieceType::King);
+        let rook = Piece::new(Color::Black, PieceType::Rook);
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::H8, rook);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::G8)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E8).is_none());
+        assert!(board.get_from_coordinate(Coordinate::H8).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::G8).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::F8).unwrap(), rook);
+    }
+
+    #[test]
+    fn apply_black_queenside_castling_with_src_dest() {
+        let mut board = Board::new_empty();
+        let king = Piece::new(Color::Black, PieceType::King);
+        let rook = Piece::new(Color::Black, PieceType::Rook);
+
+        board.place_piece(Coordinate::E8, king);
+        board.place_piece(Coordinate::A8, rook);
+
+        assert!(board
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::C8)
+            .is_ok());
+
+        assert!(board.get_from_coordinate(Coordinate::E8).is_none());
+        assert!(board.get_from_coordinate(Coordinate::A8).is_none());
+        assert_eq!(board.get_from_coordinate(Coordinate::C8).unwrap(), king);
+        assert_eq!(board.get_from_coordinate(Coordinate::D8).unwrap(), rook);
     }
 }
