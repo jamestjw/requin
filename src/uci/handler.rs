@@ -147,7 +147,9 @@ fn position_with_startpos<W: Write + Send + 'static>(
 
 fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_str: String) {
     let mut state = state.lock().unwrap();
-    state.go_args = Some(GoArgs::new_from_args_str(args_str));
+    let go_args = GoArgs::new_from_args_str(args_str);
+    let depth = go_args.depth;
+    state.go_args = Some(go_args);
 
     let pos = match state.position {
         Some(pos) => pos,
@@ -158,9 +160,7 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
         }
     };
 
-    // TODO: Read from go args when the engine is
-    // capable of early stopping
-    let mut searcher = Searcher::new(Game::new(pos), 5, 16);
+    let mut searcher = Searcher::new(Game::new(pos), depth, 16);
 
     match searcher.get_best_move() {
         Ok(best_move) => {
