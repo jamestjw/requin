@@ -5,7 +5,7 @@ use regex::Regex;
 pub fn parse_fen(fen_str: String) -> Result<Board, &'static str> {
     lazy_static! {
         static ref FEN_REGEX: Regex =
-            Regex::new(r"^\s*([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+)$").unwrap();
+            Regex::new(r"\s*([prnbqkPRNBQK12345678]{1,8}(?:/[prnbqkPRNBQK12345678]{1,8}){7})\s+(w|b)\s+([KQkq]{1,4}|-)\s+(-|[a-h][1-8])\s(\d+\s\d+)").unwrap();
     }
 
     match FEN_REGEX.captures(&fen_str) {
@@ -80,11 +80,7 @@ pub fn parse_fen(fen_str: String) -> Result<Board, &'static str> {
 
             // Handle en passant target square
             if &matches[4] != "-" {
-                let file_str = matches[4].chars().nth(0).unwrap();
-                let rank_str = matches[4].chars().nth(1).unwrap();
-                let file = file_to_index(&file_str.to_string());
-                let rank = rank_str.to_string().parse::<usize>().unwrap();
-                board.set_en_passant_square(Coordinate::new_from_rank_file(rank, file));
+                board.set_en_passant_square(Coordinate::new_from_algebraic_notation(&matches[4]));
             }
 
             Ok(board)

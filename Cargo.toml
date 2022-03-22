@@ -1,6 +1,6 @@
 [package]
 name = "requin"
-version = "0.1.0"
+version = "1.1.0"
 authors = ["James Tan <james_tan97@outlook.com>"]
 edition = "2018"
 
@@ -16,4 +16,7 @@ itertools = "0.10.3"
 structopt = "0.3.26"
 exitcode = "1.1.2"
 threadpool = "1.8.1"
+mockall_double = "0.1.0"
 
+[dev-dependencies]
+mockall = "0.8.0"

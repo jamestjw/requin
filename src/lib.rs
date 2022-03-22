@@ -4,10 +4,12 @@ pub mod game;
 pub mod generator;
 pub mod r#move;
 pub mod parser;
+pub mod uci;
 
 use board::Board;
 use engine::Searcher;
 use game::Game;
+use uci::Client;
 
 use std::process::exit;
 
@@ -67,4 +69,9 @@ pub fn play_game_pvp() {
 
         game.get_next_move();
     }
+}
+
+pub fn run_uci() {
+    let mut uci_client = Client::new();
+    uci_client.run();
 }
