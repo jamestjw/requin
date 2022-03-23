@@ -74,6 +74,7 @@ impl Searcher {
         match self.game.state {
             GameState::WhiteWon => return 9998.0,
             GameState::BlackWon => return -9998.0,
+            GameState::Stalemate => return 0.0,
             _ => {}
         }
 
@@ -104,6 +105,7 @@ impl Searcher {
         match self.game.state {
             GameState::WhiteWon => return 9998.0,
             GameState::BlackWon => return -9998.0,
+            GameState::Stalemate => return 0.0,
             _ => {}
         }
 
