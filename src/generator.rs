@@ -99,7 +99,7 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         match board.get_from_coordinate(front_side_square) {
             Some(p) => {
                 if p.color == piece.color.other_color() {
-                    let mut capture_move = Move::new(src, front_side_square, piece, true);
+                    let mut capture_move = Move::new_capture(src, front_side_square, piece, p.piece_type);
 
                     // Handle possible promotion by capturing
                     if piece_color.is_white() && front_square.is_in_rank(8)
@@ -122,7 +122,7 @@ fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
         // Handle en passant
         if let Some(en_passant_square) = board.get_en_passant_square() {
             if front_side_square == en_passant_square {
-                let mut en_passant_move = Move::new(src, en_passant_square, piece, true);
+                let mut en_passant_move = Move::new_capture(src, en_passant_square, piece, PieceType::Pawn);
                 en_passant_move.is_en_passant = true;
                 res.push(en_passant_move);
             }
@@ -175,7 +175,7 @@ fn generate_bishop_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
                 if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
                     // Add a move for the capture of an opposing color piece
                     if occupying_piece.color != piece.color {
-                        res.push(Move::new(src, dest_square, piece, true));
+                        res.push(Move::new_capture(src, dest_square, piece, occupying_piece.piece_type));
                     }
 
                     // The bishop may not jump over a piece hence we stop the search
@@ -202,7 +202,7 @@ fn generate_knight_moves(board: &Board, src: Coordinate) -> Vec<Move> {
             Some(occupant) => {
                 // Capture an enemy piece
                 if occupant.color != piece.color {
-                    res.push(Move::new(src, *dest_square, piece, true));
+                    res.push(Move::new_capture(src, *dest_square, piece, occupant.piece_type));
                 }
             }
             None => {
@@ -227,7 +227,7 @@ fn generate_rook_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
                 if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
                     // Add a move for the capture of an opposing color piece
                     if occupying_piece.color != piece.color {
-                        res.push(Move::new(src, dest_square, piece, true));
+                        res.push(Move::new_capture(src, dest_square, piece, occupying_piece.piece_type));
                     }
 
                     // The rook may not jump over a piece hence we stop the search
@@ -255,7 +255,7 @@ fn generate_king_moves(board: &Board, src: Coordinate, with_castling: bool) -> V
             if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
                 // Add a move for the capture of an opposing color piece
                 if occupying_piece.color != piece.color {
-                    res.push(Move::new(src, dest_square, piece, true));
+                    res.push(Move::new_capture(src, dest_square, piece, occupying_piece.piece_type));
                 }
             } else {
                 res.push(Move::new(src, dest_square, piece, false));
@@ -409,6 +409,17 @@ pub fn generate_legal_moves(board: &Board) -> Vec<Move> {
     generate_moves(board)
         .into_iter()
         .filter(|m| is_move_legal(board, player_color, m))
+        .collect()
+}
+
+pub fn generate_non_quiescent_moves(board: &Board) -> Vec<Move> {
+    // Filter out illegal moves, i.e. moves that endanger the king.
+    // Also filter out moves that aren't captures
+    let player_color = board.get_player_color();
+
+    generate_moves(board)
+        .into_iter()
+        .filter(|m| is_move_legal(board, player_color, m) && m.is_capture)
         .collect()
 }
 
@@ -668,8 +679,8 @@ mod test {
         let moves = generate_pawn_moves(&board, piece_coord);
 
         assert!(moves.into_iter().eq(vec![
-            Move::new(piece_coord, Coordinate::D5, pawn, true),
-            Move::new(piece_coord, Coordinate::F5, pawn, true),
+            Move::new_capture(piece_coord, Coordinate::D5, pawn, PieceType::Bishop),
+            Move::new_capture(piece_coord, Coordinate::F5, pawn, PieceType::Knight),
             Move::new(piece_coord, Coordinate::E5, pawn, false),
         ]));
     }
@@ -693,7 +704,7 @@ mod test {
         board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
-        let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F6, pawn, true);
+        let mut expected_en_passant_move = Move::new_capture(piece_coord, Coordinate::F6, pawn, PieceType::Pawn);
         expected_en_passant_move.is_en_passant = true;
 
         assert!(moves.contains(&expected_en_passant_move));
@@ -743,7 +754,7 @@ mod test {
         board.apply_move(&last_move);
 
         let moves = generate_pawn_moves(&board, piece_coord);
-        let mut expected_en_passant_move = Move::new(piece_coord, Coordinate::F3, pawn, true);
+        let mut expected_en_passant_move = Move::new_capture(piece_coord, Coordinate::F3, pawn, PieceType::Pawn);
         expected_en_passant_move.is_en_passant = true;
 
         assert!(moves.contains(&expected_en_passant_move));
@@ -812,7 +823,7 @@ mod test {
         board.place_piece(piece_coord, pawn);
         board.place_piece(Coordinate::F8, enemy_rook);
 
-        let mut expected_move = Move::new(piece_coord, Coordinate::F8, pawn, true);
+        let mut expected_move = Move::new_capture(piece_coord, Coordinate::F8, pawn, PieceType::Rook);
         expected_move.is_promotion = true;
 
         let moves = generate_pawn_moves(&board, piece_coord);
@@ -861,7 +872,7 @@ mod test {
         board.place_piece(piece_coord, pawn);
         board.place_piece(Coordinate::C1, enemy_knight);
 
-        let mut expected_move = Move::new(piece_coord, Coordinate::C1, pawn, true);
+        let mut expected_move = Move::new_capture(piece_coord, Coordinate::C1, pawn, PieceType::Knight);
         expected_move.is_promotion = true;
 
         let moves = generate_pawn_moves(&board, piece_coord);
@@ -935,7 +946,7 @@ mod test {
         // Top left
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, bishop, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::C6, bishop, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::B7, bishop, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::B7, bishop, PieceType::Knight)));
 
         // Bottom left
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, bishop, false)));
@@ -948,7 +959,7 @@ mod test {
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::H7, bishop, false)));
 
         // Bottom right
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, bishop, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::F3, bishop, PieceType::Pawn)));
     }
 
     #[test]
@@ -1057,7 +1068,7 @@ mod test {
         // Top
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E6, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E7, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::E7, piece, PieceType::Bishop)));
 
         // Bottom
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
@@ -1066,7 +1077,7 @@ mod test {
 
         // Right
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::G4, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::G4, piece, PieceType::King)));
 
         // Left
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
@@ -1212,7 +1223,7 @@ mod test {
 
         // Bottom
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E2, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::E2, piece, PieceType::Pawn)));
 
         // Right
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
@@ -1237,7 +1248,7 @@ mod test {
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::B1, piece, false)));
 
         // Top right
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::F5, piece, PieceType::Bishop)));
 
         // Bottom right
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
@@ -1358,10 +1369,10 @@ mod test {
 
         assert_eq!(moves.len(), 8);
 
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::F6, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::F6, piece, PieceType::Knight)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D6, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::C5, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::C3, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::C3, piece, PieceType::Rook)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D2, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F2, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::G3, piece, false)));
@@ -1455,11 +1466,11 @@ mod test {
         assert_eq!(moves.len(), 8);
 
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D5, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::E5, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::E5, piece, PieceType::Bishop)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F5, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::D4, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F4, piece, false)));
-        assert!(moves.contains(&Move::new(piece_coord, Coordinate::D3, piece, true)));
+        assert!(moves.contains(&Move::new_capture(piece_coord, Coordinate::D3, piece, PieceType::Knight)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::E3, piece, false)));
         assert!(moves.contains(&Move::new(piece_coord, Coordinate::F3, piece, false)));
     }
@@ -2412,7 +2423,7 @@ mod test {
         assert!(moves.contains(&Move::new(Coordinate::G1, Coordinate::E2, knight, false)));
 
         // Capture the attacking piece
-        assert!(moves.contains(&Move::new(Coordinate::A8, Coordinate::E8, rook, true)));
+        assert!(moves.contains(&Move::new_capture(Coordinate::A8, Coordinate::E8, rook, PieceType::Rook)));
     }
 
     #[test]

@@ -17,6 +17,9 @@ pub struct Move {
     pub castling_side: CastlingSide,
     pub promotes_to: Option<PieceType>,
     pub is_promotion: bool,
+    // If is_capture is true, captured_piece_type might contain
+    // extra information about the captured piece
+    pub captured_piece_type: Option<PieceType>,
 }
 
 impl Move {
@@ -30,6 +33,21 @@ impl Move {
             is_en_passant: false,
             promotes_to: None,
             is_promotion: false,
+            captured_piece_type: None
+        }
+    }
+
+    pub fn new_capture(src: Coordinate, dest: Coordinate, piece: Piece, captured_piece_type: PieceType) -> Self {
+        Move {
+            src,
+            dest,
+            piece,
+            is_capture: true,
+            castling_side: CastlingSide::Unknown,
+            is_en_passant: false,
+            promotes_to: None,
+            is_promotion: false,
+            captured_piece_type: Some(captured_piece_type)
         }
     }
 
@@ -64,6 +82,7 @@ impl Move {
             is_en_passant: false,
             is_promotion: false,
             promotes_to: None,
+            captured_piece_type: None
         }
     }
 

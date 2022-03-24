@@ -1,7 +1,10 @@
 use super::evaluator::evaluate_board;
-use crate::game::{Game, GameState};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
+use crate::{
+    game::{Game, GameState},
+    generator::generate_non_quiescent_moves,
+};
 
 use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
@@ -90,8 +93,7 @@ impl Searcher {
         }
 
         if depth == 0 {
-            let offset = if is_white { -1 } else { 1 };
-            return offset * evaluate_board(self.game.current_board());
+            return self.quiesce(alpha, beta, is_white);
         } else if depth == 1 {
             // Futility pruning
             let offset = if is_white { -1 } else { 1 };
@@ -122,6 +124,37 @@ impl Searcher {
         }
 
         alpha
+    }
+
+    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, is_white: bool) -> i32 {
+        let offset = if is_white { -1 } else { 1 };
+        let stand_pat = offset * evaluate_board(self.game.current_board());
+
+        if stand_pat >= beta {
+            return beta;
+        }
+
+        if alpha < stand_pat {
+            alpha = stand_pat;
+        }
+
+        // TODO: Sort moves based on MVV/LVA
+        let non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board());
+        for m in non_quiescent_moves {
+            self.game.apply_move(m);
+            let score = -self.quiesce(-beta, -alpha, !is_white);
+            self.game.undo_move();
+
+            if score >= beta {
+                return beta;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
+        }
+
+        return alpha;
     }
 
     pub fn apply_best_move(&mut self) {
