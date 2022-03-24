@@ -1,6 +1,7 @@
 use requin::board::*;
 use requin::engine::Searcher;
 use requin::game::Game;
+use requin::parser::parse_fen;
 use requin::r#move::Move;
 
 #[test]
@@ -191,6 +192,44 @@ fn test_depth_three_best_move_white() {
     let mut searcher = Searcher::new(game, 3, 1);
     let best_move = searcher.get_best_move();
     let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook, false);
+
+    assert_eq!(best_move.unwrap(), expected_move);
+}
+
+#[test]
+fn white_mate_in_one() {
+    let board = parse_fen(String::from(
+        "r2qkbnr/1b5p/p1n2p2/1pN1pNp1/1P1pP3/1Q4P1/PBPPBP1P/R3K2R w KQkq - 0 1",
+    ))
+    .unwrap();
+    let game = Game::new(board);
+    let mut searcher = Searcher::new(game, 1, 1);
+    let best_move = searcher.get_best_move();
+    let expected_move = Move::new(
+        Coordinate::E2,
+        Coordinate::H5,
+        Piece::new(Color::White, PieceType::Bishop),
+        false,
+    );
+
+    assert_eq!(best_move.unwrap(), expected_move);
+}
+
+#[test]
+fn black_mate_in_one() {
+    let board = parse_fen(String::from(
+        "5rk1/NQp1q1pp/2B1p3/4P1p1/B1p2P2/N1P2R1K/B7/Q4nr1 b - - 0 1",
+    ))
+    .unwrap();
+    let game = Game::new(board);
+    let mut searcher = Searcher::new(game, 1, 1);
+    let best_move = searcher.get_best_move();
+    let expected_move = Move::new(
+        Coordinate::G5,
+        Coordinate::G4,
+        Piece::new(Color::Black, PieceType::Pawn),
+        false,
+    );
 
     assert_eq!(best_move.unwrap(), expected_move);
 }

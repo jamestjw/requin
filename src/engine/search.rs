@@ -6,6 +6,9 @@ use crate::r#move::Move;
 use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
 
+static CHECKMATE_SCORE: f32 = 9998.0;
+static STALEMATE_SCORE: f32 = 0.0;
+
 #[derive(Clone)]
 pub struct Searcher {
     pub game: Game,
@@ -46,11 +49,12 @@ impl Searcher {
             let search_depth = self.search_depth - 1;
             searcher.game.apply_move(m);
             pool.execute(move || {
-                let curr_eval = if is_white_turn {
-                    searcher.alpha_beta_min(search_depth, -10000.0, 10000.0)
-                } else {
-                    searcher.alpha_beta_max(search_depth, -10000.0, 10000.0)
-                };
+                let curr_eval = -searcher.alpha_beta(
+                    search_depth,
+                    f32::NEG_INFINITY,
+                    f32::INFINITY,
+                    is_white_turn,
+                );
                 tx.send((m, curr_eval))
                     .expect("Unexpected error: Main thread is not receiving.");
             });
@@ -59,34 +63,30 @@ impl Searcher {
         // Assuming that all moves are evaluated successfully without fail
         let mut move_evals: Vec<(Move, f32)> = rx.iter().take(num_legal_moves).collect();
 
-        // Sort by descending order if it is white's turn
-        if is_white_turn {
-            move_evals.sort_by(|(_, e1), (_, e2)| e2.partial_cmp(e1).unwrap());
-        } else {
-            move_evals.sort_by(|(_, e1), (_, e2)| e1.partial_cmp(e2).unwrap());
-        }
+        move_evals.sort_by(|(_, e1), (_, e2)| e2.partial_cmp(e1).unwrap());
 
         Ok(move_evals[0].0)
     }
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
-    pub fn alpha_beta_max(&mut self, depth: u32, mut alpha: f32, beta: f32) -> f32 {
+    // Alpha-beta pruning in the negamax framework
+    pub fn alpha_beta(&mut self, depth: u32, mut alpha: f32, beta: f32, is_white: bool) -> f32 {
         match self.game.state {
-            GameState::WhiteWon => return 9998.0,
-            GameState::BlackWon => return -9998.0,
-            GameState::Stalemate => return 0.0,
-            _ => {}
+            GameState::InProgress => {}
+            GameState::WhiteWon | GameState::BlackWon => return -CHECKMATE_SCORE,
+            GameState::Stalemate => return STALEMATE_SCORE,
         }
 
         if depth == 0 {
-            return evaluate_board(self.game.current_board());
+            let offset = if is_white { -1.0 } else { 1.0 };
+            return offset * evaluate_board(self.game.current_board());
         }
 
         let legal_moves = generate_legal_moves(self.game.current_board());
 
         for m in legal_moves {
             self.game.apply_move(m);
-            let score = self.alpha_beta_min(depth - 1, alpha, beta);
+            let score = -self.alpha_beta(depth - 1, -beta, -alpha, !is_white);
             self.game.undo_move();
 
             if score >= beta {
@@ -99,37 +99,6 @@ impl Searcher {
         }
 
         alpha
-    }
-
-    pub fn alpha_beta_min(&mut self, depth: u32, alpha: f32, mut beta: f32) -> f32 {
-        match self.game.state {
-            GameState::WhiteWon => return 9998.0,
-            GameState::BlackWon => return -9998.0,
-            GameState::Stalemate => return 0.0,
-            _ => {}
-        }
-
-        if depth == 0 {
-            return evaluate_board(self.game.current_board());
-        }
-
-        let legal_moves = generate_legal_moves(self.game.current_board());
-
-        for m in legal_moves {
-            self.game.apply_move(m);
-            let score = self.alpha_beta_max(depth - 1, alpha, beta);
-            self.game.undo_move();
-
-            if score <= alpha {
-                return alpha;
-            }
-
-            if score < beta {
-                beta = score;
-            }
-        }
-
-        beta
     }
 
     pub fn apply_best_move(&mut self) {
