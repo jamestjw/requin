@@ -215,7 +215,7 @@ fn white_mate_in_one() {
     ))
     .unwrap();
     let game = Game::new(board);
-    let mut searcher = Searcher::new(game, 1, 1);
+    let mut searcher = Searcher::new(game, 1, 32);
     let best_move = searcher.get_best_move();
     let expected_move = Move::new(
         Coordinate::E2,
@@ -233,7 +233,7 @@ fn black_mate_in_one() {
     ))
     .unwrap();
     let game = Game::new(board);
-    let mut searcher = Searcher::new(game, 1, 1);
+    let mut searcher = Searcher::new(game, 1, 32);
     let best_move = searcher.get_best_move();
     let expected_move = Move::new(
         Coordinate::G5,
@@ -251,7 +251,7 @@ fn white_mate_in_two() {
     ))
     .unwrap();
     let game = Game::new(board);
-    let mut searcher = Searcher::new(game, 3, 1);
+    let mut searcher = Searcher::new(game, 3, 32);
     let best_move = searcher.get_best_move();
     let expected_move = Move::new(
         Coordinate::F7,

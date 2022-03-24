@@ -1710,6 +1710,7 @@ mod test {
         for (obstructing_piece, obstructing_square) in &obstructing_pieces {
             let mut board = Board::new_empty();
             board.enable_castling(Color::White, true);
+            board.disable_castling(Color::White, false);
             let king = Piece {
                 color: Color::White,
                 piece_type: PieceType::King,

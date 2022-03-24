@@ -1,4 +1,4 @@
-use super::evaluator::evaluate_board;
+use super::evaluator::{evaluate_board, piece_value_difference};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 use crate::{
@@ -20,6 +20,7 @@ pub struct Searcher {
     pub game: Game,
     search_depth: u32,
     num_threads: usize,
+    nodes_searched: u32,
 }
 
 impl Searcher {
@@ -31,6 +32,7 @@ impl Searcher {
             game,
             search_depth,
             num_threads,
+            nodes_searched: 0,
         }
     }
 
@@ -108,6 +110,8 @@ impl Searcher {
         let legal_moves = generate_legal_moves(self.game.current_board());
 
         for m in legal_moves {
+            self.nodes_searched += 1;
+
             self.game.apply_move(m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
@@ -138,9 +142,18 @@ impl Searcher {
             alpha = stand_pat;
         }
 
-        // TODO: Sort moves based on MVV/LVA
-        let non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board());
+        // Sort moves based on MVV/LVA
+        let mut non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board());
+        non_quiescent_moves.sort_by(|m1, m2| {
+            // Unwrapping the captured piece type is safe since we only have captures
+            piece_value_difference(m2.captured_piece_type.unwrap(), m2.piece.piece_type).cmp(
+                &piece_value_difference(m1.captured_piece_type.unwrap(), m1.piece.piece_type),
+            )
+        });
+
         for m in non_quiescent_moves {
+            self.nodes_searched += 1;
+
             self.game.apply_move(m);
             let score = -self.quiesce(-beta, -alpha, !is_white);
             self.game.undo_move();
@@ -164,5 +177,9 @@ impl Searcher {
             }
             Err(e) => panic!("Unable to apply best move. Error: {}", e),
         }
+    }
+
+    pub fn get_nodes_searched(&self) -> u32 {
+        self.nodes_searched
     }
 }

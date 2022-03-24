@@ -168,6 +168,10 @@ pub fn evaluate_board(board: &Board) -> i32 {
     score
 }
 
+pub fn piece_value_difference(p1: PieceType, p2: PieceType) -> i32 {
+    get_raw_piece_value(p1) - get_raw_piece_value(p2)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
