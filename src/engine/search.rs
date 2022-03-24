@@ -6,8 +6,10 @@ use crate::r#move::Move;
 use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
 
-static CHECKMATE_SCORE: f32 = 9998.0;
-static STALEMATE_SCORE: f32 = 0.0;
+static CHECKMATE_SCORE: i32 = 320000;
+static STALEMATE_SCORE: i32 = 0;
+static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
+static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
 
 #[derive(Clone)]
 pub struct Searcher {
@@ -49,28 +51,24 @@ impl Searcher {
             let search_depth = self.search_depth - 1;
             searcher.game.apply_move(m);
             pool.execute(move || {
-                let curr_eval = -searcher.alpha_beta(
-                    search_depth,
-                    f32::NEG_INFINITY,
-                    f32::INFINITY,
-                    is_white_turn,
-                );
+                let curr_eval =
+                    -searcher.alpha_beta(search_depth, INITIAL_ALPHA, INITIAL_BETA, is_white_turn);
                 tx.send((m, curr_eval))
                     .expect("Unexpected error: Main thread is not receiving.");
             });
         }
 
         // Assuming that all moves are evaluated successfully without fail
-        let mut move_evals: Vec<(Move, f32)> = rx.iter().take(num_legal_moves).collect();
+        let mut move_evals: Vec<(Move, i32)> = rx.iter().take(num_legal_moves).collect();
 
-        move_evals.sort_by(|(_, e1), (_, e2)| e2.partial_cmp(e1).unwrap());
+        move_evals.sort_by(|(_, e1), (_, e2)| e2.cmp(e1));
 
         Ok(move_evals[0].0)
     }
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
     // Alpha-beta pruning in the negamax framework
-    pub fn alpha_beta(&mut self, depth: u32, mut alpha: f32, beta: f32, is_white: bool) -> f32 {
+    pub fn alpha_beta(&mut self, depth: u32, mut alpha: i32, beta: i32, is_white: bool) -> i32 {
         match self.game.state {
             GameState::InProgress => {}
             GameState::WhiteWon | GameState::BlackWon => return -CHECKMATE_SCORE,
@@ -78,7 +76,7 @@ impl Searcher {
         }
 
         if depth == 0 {
-            let offset = if is_white { -1.0 } else { 1.0 };
+            let offset = if is_white { -1 } else { 1 };
             return offset * evaluate_board(self.game.current_board());
         }
 
