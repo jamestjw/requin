@@ -18,8 +18,8 @@ jobs:
           name: Stable Build
           command: cargo build
       - run:
-          name: Test
-          command: cargo test
+          name: Test (in release mode)
+          command: cargo test --release
       - save_cache:
           key: requin-cache-{{ arch }}-{{ .Branch }}-{{ checksum "Cargo.lock" }}
           paths:
