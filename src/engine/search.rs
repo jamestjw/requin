@@ -52,8 +52,14 @@ impl Searcher {
             let search_depth = self.search_depth - 1;
             searcher.game.apply_move(m);
             pool.execute(move || {
-                let curr_eval =
-                    -searcher.alpha_beta(search_depth, INITIAL_ALPHA, INITIAL_BETA, is_white_turn);
+                // Whether a move can be pruned depends on whether it is a capture
+                let curr_eval = -searcher.alpha_beta(
+                    search_depth,
+                    INITIAL_ALPHA,
+                    INITIAL_BETA,
+                    is_white_turn,
+                    !m.is_capture,
+                );
                 tx.send((m, curr_eval))
                     .expect("Unexpected error: Main thread is not receiving.");
             });
@@ -69,7 +75,14 @@ impl Searcher {
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
     // Alpha-beta pruning in the negamax framework
-    pub fn alpha_beta(&mut self, depth: u32, mut alpha: i32, beta: i32, is_white: bool) -> i32 {
+    pub fn alpha_beta(
+        &mut self,
+        depth: u32,
+        mut alpha: i32,
+        beta: i32,
+        is_white: bool,
+        can_prune: bool,
+    ) -> i32 {
         match self.game.state {
             GameState::InProgress => {}
             GameState::WhiteWon | GameState::BlackWon => return -CHECKMATE_SCORE,
@@ -85,7 +98,7 @@ impl Searcher {
             let eval = offset * evaluate_board(self.game.current_board());
             // If a move proves to be futile, we just return alpha since
             // further continuations are unlikely to raise alpha
-            if eval + FUTILITY_MARGIN < alpha {
+            if eval + FUTILITY_MARGIN < alpha && can_prune {
                 return alpha;
             }
         }
@@ -94,7 +107,9 @@ impl Searcher {
 
         for m in legal_moves {
             self.game.apply_move(m);
-            let score = -self.alpha_beta(depth - 1, -beta, -alpha, !is_white);
+            // Whether or not a node can be pruned depends on whether
+            // the move was a 'peaceful' move
+            let score = -self.alpha_beta(depth - 1, -beta, -alpha, !is_white, !m.is_capture);
             self.game.undo_move();
 
             if score >= beta {
