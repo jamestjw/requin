@@ -576,31 +576,34 @@ impl Board {
             Some(p) => p,
             None => return Err("Missing piece on source square"),
         };
-        let (is_capture, is_en_passant) = match self.get_from_coordinate(dest) {
+        let (captured_piece_type, is_en_passant) = match self.get_from_coordinate(dest) {
             Some(p) => {
                 if p.color == src_piece.color {
                     return Err("Illegal capture");
                 }
-                (true, false)
+                (Some(p.piece_type), false)
             }
             None => {
                 // Check for en passant
                 match self.en_passant_square {
                     Some(eps) => {
                         if src_piece.piece_type == PieceType::Pawn && dest == eps {
-                            (true, true)
+                            (Some(PieceType::Pawn), true)
                         } else {
-                            (false, false)
+                            (None, false)
                         }
                     }
-                    None => (false, false),
+                    None => (None, false),
                 }
             }
         };
 
         // TODO: Verify if the piece is allowed to move from
         // src to dest
-        let mut m = Move::new(src, dest, src_piece, is_capture);
+        let mut m = match captured_piece_type {
+            Some(piece_type) => Move::new_capture(src, dest, src_piece, piece_type),
+            None => Move::new(src, dest, src_piece),
+        };
         m.is_en_passant = is_en_passant;
         m.promotes_to = promotes_to;
 
@@ -1156,7 +1159,7 @@ mod board_tests {
 
         board.place_piece(Coordinate::E4, piece);
 
-        let m = Move::new(Coordinate::E4, Coordinate::H7, piece, false);
+        let m = Move::new(Coordinate::E4, Coordinate::H7, piece);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1183,7 +1186,7 @@ mod board_tests {
         board.place_piece(Coordinate::E4, white_pawn);
         board.place_piece(Coordinate::F5, black_pawn);
 
-        let m = Move::new(Coordinate::E4, Coordinate::F5, white_pawn, true);
+        let m = Move::new_capture(Coordinate::E4, Coordinate::F5, white_pawn, PieceType::Pawn);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1327,7 +1330,7 @@ mod board_tests {
         board.place_piece(Coordinate::E5, white_pawn);
         board.place_piece(Coordinate::F5, black_pawn);
 
-        let mut m = Move::new(Coordinate::E5, Coordinate::F6, white_pawn, true);
+        let mut m = Move::new_capture(Coordinate::E5, Coordinate::F6, white_pawn, PieceType::Pawn);
         m.is_en_passant = true;
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1361,7 +1364,7 @@ mod board_tests {
         board.place_piece(Coordinate::E4, white_pawn);
         board.place_piece(Coordinate::F4, black_pawn);
 
-        let mut m = Move::new(Coordinate::F4, Coordinate::E3, black_pawn, true);
+        let mut m = Move::new_capture(Coordinate::F4, Coordinate::E3, black_pawn, PieceType::Pawn);
         m.is_en_passant = true;
 
         assert_eq!(board.get_player_color(), Color::Black);
@@ -1393,7 +1396,7 @@ mod board_tests {
 
         board.place_piece(Coordinate::E7, white_pawn);
 
-        let mut m = Move::new(Coordinate::E7, Coordinate::E8, white_pawn, false);
+        let mut m = Move::new(Coordinate::E7, Coordinate::E8, white_pawn);
         m.promotes_to = Some(PieceType::Knight);
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1429,7 +1432,7 @@ mod board_tests {
         board.place_piece(Coordinate::E7, white_pawn);
         board.place_piece(Coordinate::F8, black_rook);
 
-        let mut m = Move::new(Coordinate::E7, Coordinate::F8, white_pawn, true);
+        let mut m = Move::new_capture(Coordinate::E7, Coordinate::F8, white_pawn, PieceType::Rook);
         m.promotes_to = Some(PieceType::Queen);
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1458,7 +1461,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::E1, Coordinate::E2, white_king, false);
+        let m = Move::new(Coordinate::E1, Coordinate::E2, white_king);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1483,7 +1486,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::A1, Coordinate::A2, white_rook, false);
+        let m = Move::new(Coordinate::A1, Coordinate::A2, white_rook);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1508,7 +1511,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::H1, Coordinate::H2, white_rook, false);
+        let m = Move::new(Coordinate::H1, Coordinate::H2, white_rook);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1534,7 +1537,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::E1, Coordinate::E2, black_king, false);
+        let m = Move::new(Coordinate::E1, Coordinate::E2, black_king);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1560,7 +1563,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::A8, Coordinate::A7, black_rook, false);
+        let m = Move::new(Coordinate::A8, Coordinate::A7, black_rook);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1586,7 +1589,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::H8, Coordinate::H7, black_rook, false);
+        let m = Move::new(Coordinate::H8, Coordinate::H7, black_rook);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1620,7 +1623,7 @@ mod board_tests {
 
         board.enable_castling(Color::White, true);
 
-        let m = Move::new(Coordinate::H8, Coordinate::H1, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::H8, Coordinate::H1, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::White, true));
         board.apply_move(&m);
@@ -1649,7 +1652,7 @@ mod board_tests {
 
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::A8, Coordinate::A1, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::A8, Coordinate::A1, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::White, false));
         board.apply_move(&m);
@@ -1678,7 +1681,7 @@ mod board_tests {
 
         board.enable_castling(Color::Black, true);
 
-        let m = Move::new(Coordinate::H1, Coordinate::H8, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::H1, Coordinate::H8, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::Black, true));
         board.apply_move(&m);
@@ -1707,7 +1710,7 @@ mod board_tests {
 
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::A1, Coordinate::A8, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::A1, Coordinate::A8, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::Black, false));
         board.apply_move(&m);

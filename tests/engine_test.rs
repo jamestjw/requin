@@ -34,7 +34,8 @@ fn test_depth_one_best_move_white() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(Coordinate::A1, Coordinate::A8, white_rook, true);
+    let expected_move =
+        Move::new_capture(Coordinate::A1, Coordinate::A8, white_rook, PieceType::Rook);
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
@@ -70,7 +71,8 @@ fn test_depth_one_best_move_black() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(Coordinate::A8, Coordinate::A1, black_rook, true);
+    let expected_move =
+        Move::new_capture(Coordinate::A8, Coordinate::A1, black_rook, PieceType::Rook);
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
@@ -110,7 +112,12 @@ fn test_depth_two_best_move_white() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(Coordinate::D4, Coordinate::H4, white_rook, true);
+    let expected_move = Move::new_capture(
+        Coordinate::D4,
+        Coordinate::H4,
+        white_rook,
+        PieceType::Bishop,
+    );
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
@@ -151,7 +158,12 @@ fn test_depth_two_best_move_black() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(Coordinate::C2, Coordinate::A2, black_rook, true);
+    let expected_move = Move::new_capture(
+        Coordinate::C2,
+        Coordinate::A2,
+        black_rook,
+        PieceType::Bishop,
+    );
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
@@ -191,7 +203,7 @@ fn test_depth_three_best_move_white() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 1);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook, false);
+    let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook);
 
     assert_eq!(best_move.unwrap(), expected_move);
 }
@@ -209,7 +221,6 @@ fn white_mate_in_one() {
         Coordinate::E2,
         Coordinate::H5,
         Piece::new(Color::White, PieceType::Bishop),
-        false,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -228,7 +239,6 @@ fn black_mate_in_one() {
         Coordinate::G5,
         Coordinate::G4,
         Piece::new(Color::Black, PieceType::Pawn),
-        false,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -247,7 +257,6 @@ fn white_mate_in_two() {
         Coordinate::F7,
         Coordinate::D5,
         Piece::new(Color::White, PieceType::Queen),
-        false,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -266,7 +275,6 @@ fn white_mate_in_two_v2() {
         Coordinate::D2,
         Coordinate::E1,
         Piece::new(Color::White, PieceType::Queen),
-        false,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -281,11 +289,11 @@ fn black_mate_in_two() {
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 32);
     let best_move = searcher.get_best_move();
-    let expected_move = Move::new(
+    let expected_move = Move::new_capture(
         Coordinate::D1,
         Coordinate::F1,
         Piece::new(Color::Black, PieceType::Queen),
-        true,
+        PieceType::Bishop,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -304,7 +312,6 @@ fn black_mate_in_three() {
         Coordinate::F7,
         Coordinate::F5,
         Piece::new(Color::Black, PieceType::Rook),
-        false,
     );
 
     assert_eq!(best_move.unwrap(), expected_move);
