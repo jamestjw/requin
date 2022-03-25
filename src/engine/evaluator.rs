@@ -1,4 +1,6 @@
-use crate::board::{Board, Color, Coordinate, PieceType};
+use crate::board::movements::*;
+use crate::board::{Board, Color, Coordinate, Piece, PieceType};
+use crate::r#move::Move;
 use lazy_static::lazy_static;
 
 // First row is the first rank, first column is the H file
@@ -172,6 +174,68 @@ pub fn piece_value_difference(p1: PieceType, p2: PieceType) -> i32 {
     get_raw_piece_value(p1) - get_raw_piece_value(p2)
 }
 
+// Finds the piece with the least value that is attacking
+// a square. Returns the piece and its source square
+fn get_smallest_attacker(board: &Board, square: Coordinate) -> Option<(Piece, Coordinate)> {
+    let color = board.get_player_color();
+
+    // Here we assume that knights are worth slightly less than bishop
+    if let Some(coord) = square_controlled_by_pawn_from(board, color, square) {
+        return Some((Piece::new(color, PieceType::Pawn), coord));
+    }
+
+    if let Some(coord) = square_controlled_by_knight_from(board, color, square) {
+        return Some((Piece::new(color, PieceType::Knight), coord));
+    }
+
+    if let Some((_, coord)) =
+        square_controlled_by_bishop_or_queen_from(board, color, square, PieceType::Bishop)
+    {
+        return Some((Piece::new(color, PieceType::Bishop), coord));
+    }
+
+    if let Some((_, coord)) =
+        square_controlled_by_rook_or_queen_from(board, color, square, PieceType::Rook)
+    {
+        return Some((Piece::new(color, PieceType::Rook), coord));
+    }
+
+    if let Some((_, coord)) =
+        square_controlled_by_bishop_or_queen_from(board, color, square, PieceType::Queen)
+    {
+        return Some((Piece::new(color, PieceType::Queen), coord));
+    }
+
+    if let Some((_, coord)) =
+        square_controlled_by_rook_or_queen_from(board, color, square, PieceType::Queen)
+    {
+        return Some((Piece::new(color, PieceType::Queen), coord));
+    }
+
+    if let Some(coord) = square_controlled_by_king_from(board, color, square) {
+        return Some((Piece::new(color, PieceType::King), coord));
+    }
+    None
+}
+
+// Assume that there is something to be captured on the square
+// This function applies moves to the board without undoing it.
+pub fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
+    if let Some((piece, src)) = get_smallest_attacker(&board, square) {
+        let victim_piece_type = board
+            .get_from_coordinate(square)
+            .expect("There should be a piece to capture here")
+            .piece_type;
+        let attacking_move = Move::new_capture(src, square, piece, victim_piece_type);
+        board.apply_move(&attacking_move);
+        board.print();
+
+        return get_raw_piece_value(victim_piece_type) - static_exchange_evaluation(board, square);
+    } else {
+        return 0;
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -258,5 +322,79 @@ mod test {
         for (color, coord, eval) in test_cases.iter() {
             assert_eq!(get_king_positional_value(*color, *coord), *eval);
         }
+    }
+
+    #[test]
+    fn get_smallest_attacker_pawn() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Coordinate::D4),
+            (PieceType::Queen, Coordinate::A8),
+            (PieceType::Rook, Coordinate::E1),
+            (PieceType::Bishop, Coordinate::C2),
+            (PieceType::Knight, Coordinate::G3),
+            (PieceType::Pawn, Coordinate::F3),
+        ];
+        for (p, coord) in pieces {
+            board.place_piece(coord, Piece::new(Color::White, p));
+            assert_eq!(
+                get_smallest_attacker(&board, Coordinate::E4).unwrap().1,
+                coord
+            );
+        }
+    }
+
+    #[test]
+    fn static_exchange_evaluation_initiated_by_white_with_simple_hanging_piece() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::White);
+        let pieces = [
+            (PieceType::Knight, Coordinate::C3, Color::White),
+            (PieceType::Pawn, Coordinate::D5, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        assert_eq!(
+            static_exchange_evaluation(board, Coordinate::D5),
+            get_raw_piece_value(PieceType::Pawn)
+        );
+    }
+
+    #[test]
+    fn static_exchange_evaluation_initiated_by_white_with_defended_piece() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::White);
+        let pieces = [
+            (PieceType::Knight, Coordinate::C3, Color::White),
+            (PieceType::Pawn, Coordinate::D5, Color::Black),
+            (PieceType::Knight, Coordinate::F6, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        assert_eq!(
+            static_exchange_evaluation(board, Coordinate::D5),
+            get_raw_piece_value(PieceType::Pawn) - get_raw_piece_value(PieceType::Knight)
+        );
+    }
+
+    #[test]
+    fn static_exchange_evaluation_initiated_by_white_with_white_advantage() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::White);
+        let pieces = [
+            (PieceType::Knight, Coordinate::C3, Color::White),
+            (PieceType::Pawn, Coordinate::E4, Color::White),
+            (PieceType::Knight, Coordinate::F6, Color::Black),
+            (PieceType::Pawn, Coordinate::D5, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        assert_eq!(
+            static_exchange_evaluation(board, Coordinate::D5),
+            get_raw_piece_value(PieceType::Knight)
+        );
     }
 }
