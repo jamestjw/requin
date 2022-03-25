@@ -380,7 +380,7 @@ fn is_move_legal(board: &Board, color: Color, m: &Move) -> bool {
     board_copy.apply_move(m);
     let king_coord = board_copy.get_king_coordinate(color);
 
-    !are_squares_controlled_by_player(&board_copy, color.other_color(), &[king_coord])
+    !is_square_controlled_by_player(&board_copy, color.other_color(), king_coord)
 }
 
 // Generate all moves given a certain board
