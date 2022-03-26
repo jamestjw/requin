@@ -138,6 +138,14 @@ impl Searcher {
             return beta;
         }
 
+        // Delta pruning
+        let big_delta = 900; // Value of a queen
+        if stand_pat < alpha - big_delta {
+            // If giving a side a queen is not good enough,
+            // then we conclude that further searches are futile
+            return alpha;
+        }
+
         if alpha < stand_pat {
             alpha = stand_pat;
         }
