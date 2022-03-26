@@ -17,19 +17,42 @@ pub struct Move {
     pub castling_side: CastlingSide,
     pub promotes_to: Option<PieceType>,
     pub is_promotion: bool,
+    // If is_capture is true, captured_piece_type might contain
+    // extra information about the captured piece
+    pub captured_piece_type: Option<PieceType>,
 }
 
 impl Move {
-    pub fn new(src: Coordinate, dest: Coordinate, piece: Piece, is_capture: bool) -> Self {
+    pub fn new(src: Coordinate, dest: Coordinate, piece: Piece) -> Self {
         Move {
             src,
             dest,
             piece,
-            is_capture,
+            is_capture: false,
             castling_side: CastlingSide::Unknown,
             is_en_passant: false,
             promotes_to: None,
             is_promotion: false,
+            captured_piece_type: None,
+        }
+    }
+
+    pub fn new_capture(
+        src: Coordinate,
+        dest: Coordinate,
+        piece: Piece,
+        captured_piece_type: PieceType,
+    ) -> Self {
+        Move {
+            src,
+            dest,
+            piece,
+            is_capture: true,
+            castling_side: CastlingSide::Unknown,
+            is_en_passant: false,
+            promotes_to: None,
+            is_promotion: false,
+            captured_piece_type: Some(captured_piece_type),
         }
     }
 
@@ -64,6 +87,7 @@ impl Move {
             is_en_passant: false,
             is_promotion: false,
             promotes_to: None,
+            captured_piece_type: None,
         }
     }
 
@@ -132,7 +156,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Bishop,
         };
-        let m = Move::new(Coordinate::E2, Coordinate::E4, piece, false);
+        let m = Move::new(Coordinate::E2, Coordinate::E4, piece);
         assert_eq!(m.to_algebraic_notation(), "Be4".to_string());
     }
 
@@ -142,7 +166,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Bishop,
         };
-        let m = Move::new(Coordinate::E2, Coordinate::E4, piece, true);
+        let m = Move::new_capture(Coordinate::E2, Coordinate::E4, piece, PieceType::Pawn);
         assert_eq!(m.to_algebraic_notation(), "Bxe4".to_string());
     }
 
@@ -152,7 +176,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let m = Move::new(Coordinate::E2, Coordinate::E4, piece, false);
+        let m = Move::new(Coordinate::E2, Coordinate::E4, piece);
         assert_eq!(m.to_algebraic_notation(), "e4".to_string());
     }
 
@@ -162,7 +186,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let m = Move::new(Coordinate::E4, Coordinate::F5, piece, true);
+        let m = Move::new_capture(Coordinate::E4, Coordinate::F5, piece, PieceType::Pawn);
         assert_eq!(m.to_algebraic_notation(), "exf5".to_string());
     }
 
@@ -172,7 +196,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let mut m = Move::new(Coordinate::E7, Coordinate::F8, piece, true);
+        let mut m = Move::new_capture(Coordinate::E7, Coordinate::F8, piece, PieceType::Pawn);
         m.is_promotion = true;
         m.promotes_to = Some(PieceType::Rook);
         assert_eq!(m.to_algebraic_notation(), "exf8=R".to_string());
@@ -184,7 +208,7 @@ mod tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let mut m = Move::new(Coordinate::E7, Coordinate::E8, piece, false);
+        let mut m = Move::new(Coordinate::E7, Coordinate::E8, piece);
         m.is_promotion = true;
         m.promotes_to = Some(PieceType::Queen);
         assert_eq!(m.to_algebraic_notation(), "e8=Q".to_string());
@@ -210,7 +234,6 @@ mod tests {
                     Coordinate::E2,
                     Coordinate::E4,
                     Piece::new(Color::White, PieceType::Pawn),
-                    false,
                 ),
                 true,
             ),
@@ -219,7 +242,6 @@ mod tests {
                     Coordinate::E2,
                     Coordinate::E3,
                     Piece::new(Color::White, PieceType::Pawn),
-                    false,
                 ),
                 false,
             ),
@@ -228,7 +250,6 @@ mod tests {
                     Coordinate::E7,
                     Coordinate::E5,
                     Piece::new(Color::Black, PieceType::Pawn),
-                    false,
                 ),
                 true,
             ),
@@ -237,7 +258,6 @@ mod tests {
                     Coordinate::E7,
                     Coordinate::E6,
                     Piece::new(Color::Black, PieceType::Pawn),
-                    false,
                 ),
                 false,
             ),
@@ -256,7 +276,6 @@ mod tests {
                     Coordinate::E4,
                     Coordinate::F5,
                     Piece::new(Color::White, PieceType::Pawn),
-                    true,
                 ),
                 "e4f5",
             ),
@@ -265,7 +284,6 @@ mod tests {
                     Coordinate::E7,
                     Coordinate::E6,
                     Piece::new(Color::Black, PieceType::Pawn),
-                    false,
                 ),
                 "e7e6",
             ),
@@ -274,7 +292,6 @@ mod tests {
                     Coordinate::G1,
                     Coordinate::F3,
                     Piece::new(Color::White, PieceType::Knight),
-                    false,
                 ),
                 "g1f3",
             ),
@@ -305,7 +322,6 @@ mod tests {
             Coordinate::E7,
             Coordinate::F8,
             Piece::new(Color::White, PieceType::Pawn),
-            true,
         );
         m.is_promotion = true;
         m.promotes_to = Some(PieceType::Rook);

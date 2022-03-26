@@ -1,10 +1,9 @@
-use crate::generator::is_square_controlled_by_player;
+use crate::board::movements::is_square_controlled_by_player;
 use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::fmt;
-use std::slice::Iter;
 
 use regex::Regex;
 
@@ -304,6 +303,10 @@ impl Board {
         self.pieces[coord as usize] = Some(piece);
     }
 
+    pub fn remove_piece(&mut self, coord: Coordinate) {
+        self.pieces[coord as usize] = None;
+    }
+
     pub fn print(&self) {
         for rank in (0..8).rev() {
             for file in 0..8 {
@@ -576,31 +579,34 @@ impl Board {
             Some(p) => p,
             None => return Err("Missing piece on source square"),
         };
-        let (is_capture, is_en_passant) = match self.get_from_coordinate(dest) {
+        let (captured_piece_type, is_en_passant) = match self.get_from_coordinate(dest) {
             Some(p) => {
                 if p.color == src_piece.color {
                     return Err("Illegal capture");
                 }
-                (true, false)
+                (Some(p.piece_type), false)
             }
             None => {
                 // Check for en passant
                 match self.en_passant_square {
                     Some(eps) => {
                         if src_piece.piece_type == PieceType::Pawn && dest == eps {
-                            (true, true)
+                            (Some(PieceType::Pawn), true)
                         } else {
-                            (false, false)
+                            (None, false)
                         }
                     }
-                    None => (false, false),
+                    None => (None, false),
                 }
             }
         };
 
         // TODO: Verify if the piece is allowed to move from
         // src to dest
-        let mut m = Move::new(src, dest, src_piece, is_capture);
+        let mut m = match captured_piece_type {
+            Some(piece_type) => Move::new_capture(src, dest, src_piece, piece_type),
+            None => Move::new(src, dest, src_piece),
+        };
         m.is_en_passant = is_en_passant;
         m.promotes_to = promotes_to;
 
@@ -743,125 +749,6 @@ impl fmt::Display for Piece {
             Color::White => write!(f, "{}", to_print.white()),
             Color::Black => write!(f, "{}", to_print.cyan()),
         }
-    }
-}
-
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum Direction {
-    N = 0,
-    NE = 1,
-    E = 2,
-    SE = 3,
-    S = 4,
-    SW = 5,
-    W = 6,
-    NW = 7,
-}
-
-impl Direction {
-    pub fn iterator() -> Iter<'static, Direction> {
-        static ALL_DIRECTIONS: [Direction; 8] = [
-            Direction::N,
-            Direction::S,
-            Direction::E,
-            Direction::W,
-            Direction::NE,
-            Direction::NW,
-            Direction::SE,
-            Direction::SW,
-        ];
-        ALL_DIRECTIONS.iter()
-    }
-
-    pub fn horizontal_vertical_iterator() -> Iter<'static, Direction> {
-        static HV_DIRECTIONS: [Direction; 4] =
-            [Direction::N, Direction::S, Direction::E, Direction::W];
-        HV_DIRECTIONS.iter()
-    }
-
-    pub fn diagonal_iterator() -> Iter<'static, Direction> {
-        static DIAG_DIRECTIONS: [Direction; 4] =
-            [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
-        DIAG_DIRECTIONS.iter()
-    }
-}
-
-// A table that knows which squares are adjacent to any
-// square on the board in all possible directions
-pub struct AdjacencyTable {
-    table: [[Option<Coordinate>; 8]; 64],
-}
-
-impl AdjacencyTable {
-    pub fn new() -> Self {
-        let mut t = AdjacencyTable {
-            table: [[None; 8]; 64],
-        };
-
-        for i in 0..64 {
-            // This is safe as these are all legal coordinates
-            let coord = Coordinate::try_from(i).unwrap();
-
-            // All squares below the 8th rank should have an
-            // adjacent square north of it
-            if !coord.is_in_rank(8) {
-                t.set(coord, coord.vertical_offset(1, true), Direction::N);
-            }
-
-            // All squares above the 1st rank should have an
-            // adjacent square south of it
-            if !coord.is_in_rank(1) {
-                t.set(coord, coord.vertical_offset(1, false), Direction::S);
-            }
-
-            // All squares not in the A-file should have an adjacent square
-            // on its left
-            // TODO: Figure out a better way to represent files
-            if !(i % 8 == 0) {
-                t.set(coord, coord.horizontal_offset(1, true), Direction::W);
-            }
-
-            // All squares not in the H-file should have an adjacent square
-            // on its left
-            // TODO: Figure out a better way to represent files
-            if !((i + 1) % 8 == 0) {
-                t.set(coord, coord.horizontal_offset(1, false), Direction::E);
-            }
-
-            // All squares not in the A-file and not on the 8th rank should have
-            // an adjacent square on its top left
-            if !((i % 8 == 0) || coord.is_in_rank(8)) {
-                t.set(coord, coord.diagonal_offset(true, true), Direction::NW);
-            }
-
-            // All squares not in the A-file and not on the 1st rank should have
-            // an adjacent square on its bottom left
-            if !((i % 8 == 0) || coord.is_in_rank(1)) {
-                t.set(coord, coord.diagonal_offset(false, true), Direction::SW);
-            }
-
-            // All squares not in the H-file and not on the 8th rank should have
-            // an adjacent square on its top right
-            if !(((i + 1) % 8 == 0) || coord.is_in_rank(8)) {
-                t.set(coord, coord.diagonal_offset(true, false), Direction::NE);
-            }
-
-            // All squares not in the H-file and not on the 1st rank should have
-            // an adjacent square on its bottom right
-            if !(((i + 1) % 8 == 0) || coord.is_in_rank(1)) {
-                t.set(coord, coord.diagonal_offset(false, false), Direction::SE);
-            }
-        }
-        t
-    }
-
-    fn set(&mut self, src: Coordinate, dest: Coordinate, dir: Direction) {
-        self.table[src as usize][dir as usize] = Some(dest);
-    }
-
-    pub fn get(&self, src: Coordinate, dir: Direction) -> Option<Coordinate> {
-        self.table[src as usize][dir as usize]
     }
 }
 
@@ -1021,81 +908,6 @@ mod coord_tests {
 }
 
 #[cfg(test)]
-mod adjacency_table_tests {
-    use super::*;
-
-    #[test]
-    fn center_square() {
-        let t = AdjacencyTable::new();
-        let src = Coordinate::E4;
-        assert_eq!(t.get(src, Direction::N), Some(Coordinate::E5));
-        assert_eq!(t.get(src, Direction::S), Some(Coordinate::E3));
-        assert_eq!(t.get(src, Direction::E), Some(Coordinate::F4));
-        assert_eq!(t.get(src, Direction::W), Some(Coordinate::D4));
-        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::D5));
-        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::F5));
-        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::D3));
-        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::F3));
-    }
-
-    #[test]
-    fn a_file_center_square() {
-        let t = AdjacencyTable::new();
-        let src = Coordinate::A4;
-        assert_eq!(t.get(src, Direction::N), Some(Coordinate::A5));
-        assert_eq!(t.get(src, Direction::S), Some(Coordinate::A3));
-        assert_eq!(t.get(src, Direction::E), Some(Coordinate::B4));
-        assert_eq!(t.get(src, Direction::W), None);
-        assert_eq!(t.get(src, Direction::NW), None);
-        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::B5));
-        assert_eq!(t.get(src, Direction::SW), None);
-        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::B3));
-    }
-
-    #[test]
-    fn h_file_center_square() {
-        let t = AdjacencyTable::new();
-        let src = Coordinate::H5;
-        assert_eq!(t.get(src, Direction::N), Some(Coordinate::H6));
-        assert_eq!(t.get(src, Direction::S), Some(Coordinate::H4));
-        assert_eq!(t.get(src, Direction::W), Some(Coordinate::G5));
-        assert_eq!(t.get(src, Direction::E), None);
-        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::G6));
-        assert_eq!(t.get(src, Direction::NE), None);
-        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::G4));
-        assert_eq!(t.get(src, Direction::SE), None);
-    }
-
-    #[test]
-    fn first_rank_center_square() {
-        let t = AdjacencyTable::new();
-        let src = Coordinate::D1;
-        assert_eq!(t.get(src, Direction::N), Some(Coordinate::D2));
-        assert_eq!(t.get(src, Direction::S), None);
-        assert_eq!(t.get(src, Direction::E), Some(Coordinate::E1));
-        assert_eq!(t.get(src, Direction::W), Some(Coordinate::C1));
-        assert_eq!(t.get(src, Direction::NW), Some(Coordinate::C2));
-        assert_eq!(t.get(src, Direction::NE), Some(Coordinate::E2));
-        assert_eq!(t.get(src, Direction::SW), None);
-        assert_eq!(t.get(src, Direction::SE), None);
-    }
-
-    #[test]
-    fn eighth_rank_center_square() {
-        let t = AdjacencyTable::new();
-        let src = Coordinate::C8;
-        assert_eq!(t.get(src, Direction::N), None);
-        assert_eq!(t.get(src, Direction::S), Some(Coordinate::C7));
-        assert_eq!(t.get(src, Direction::E), Some(Coordinate::D8));
-        assert_eq!(t.get(src, Direction::W), Some(Coordinate::B8));
-        assert_eq!(t.get(src, Direction::NW), None);
-        assert_eq!(t.get(src, Direction::NE), None);
-        assert_eq!(t.get(src, Direction::SW), Some(Coordinate::B7));
-        assert_eq!(t.get(src, Direction::SE), Some(Coordinate::D7));
-    }
-}
-
-#[cfg(test)]
 mod castling_rights_tests {
     use super::*;
 
@@ -1156,7 +968,7 @@ mod board_tests {
 
         board.place_piece(Coordinate::E4, piece);
 
-        let m = Move::new(Coordinate::E4, Coordinate::H7, piece, false);
+        let m = Move::new(Coordinate::E4, Coordinate::H7, piece);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1183,7 +995,7 @@ mod board_tests {
         board.place_piece(Coordinate::E4, white_pawn);
         board.place_piece(Coordinate::F5, black_pawn);
 
-        let m = Move::new(Coordinate::E4, Coordinate::F5, white_pawn, true);
+        let m = Move::new_capture(Coordinate::E4, Coordinate::F5, white_pawn, PieceType::Pawn);
 
         assert_eq!(board.get_player_color(), Color::White);
 
@@ -1327,7 +1139,7 @@ mod board_tests {
         board.place_piece(Coordinate::E5, white_pawn);
         board.place_piece(Coordinate::F5, black_pawn);
 
-        let mut m = Move::new(Coordinate::E5, Coordinate::F6, white_pawn, true);
+        let mut m = Move::new_capture(Coordinate::E5, Coordinate::F6, white_pawn, PieceType::Pawn);
         m.is_en_passant = true;
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1361,7 +1173,7 @@ mod board_tests {
         board.place_piece(Coordinate::E4, white_pawn);
         board.place_piece(Coordinate::F4, black_pawn);
 
-        let mut m = Move::new(Coordinate::F4, Coordinate::E3, black_pawn, true);
+        let mut m = Move::new_capture(Coordinate::F4, Coordinate::E3, black_pawn, PieceType::Pawn);
         m.is_en_passant = true;
 
         assert_eq!(board.get_player_color(), Color::Black);
@@ -1393,7 +1205,7 @@ mod board_tests {
 
         board.place_piece(Coordinate::E7, white_pawn);
 
-        let mut m = Move::new(Coordinate::E7, Coordinate::E8, white_pawn, false);
+        let mut m = Move::new(Coordinate::E7, Coordinate::E8, white_pawn);
         m.promotes_to = Some(PieceType::Knight);
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1429,7 +1241,7 @@ mod board_tests {
         board.place_piece(Coordinate::E7, white_pawn);
         board.place_piece(Coordinate::F8, black_rook);
 
-        let mut m = Move::new(Coordinate::E7, Coordinate::F8, white_pawn, true);
+        let mut m = Move::new_capture(Coordinate::E7, Coordinate::F8, white_pawn, PieceType::Rook);
         m.promotes_to = Some(PieceType::Queen);
 
         assert_eq!(board.get_player_color(), Color::White);
@@ -1458,7 +1270,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::E1, Coordinate::E2, white_king, false);
+        let m = Move::new(Coordinate::E1, Coordinate::E2, white_king);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1483,7 +1295,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::A1, Coordinate::A2, white_rook, false);
+        let m = Move::new(Coordinate::A1, Coordinate::A2, white_rook);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1508,7 +1320,7 @@ mod board_tests {
         board.enable_castling(Color::White, true);
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::H1, Coordinate::H2, white_rook, false);
+        let m = Move::new(Coordinate::H1, Coordinate::H2, white_rook);
 
         assert_eq!(board.get_player_color(), Color::White);
         assert!(board.may_castle(Color::White, true));
@@ -1534,7 +1346,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::E1, Coordinate::E2, black_king, false);
+        let m = Move::new(Coordinate::E1, Coordinate::E2, black_king);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1560,7 +1372,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::A8, Coordinate::A7, black_rook, false);
+        let m = Move::new(Coordinate::A8, Coordinate::A7, black_rook);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1586,7 +1398,7 @@ mod board_tests {
         board.enable_castling(Color::Black, true);
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::H8, Coordinate::H7, black_rook, false);
+        let m = Move::new(Coordinate::H8, Coordinate::H7, black_rook);
 
         assert_eq!(board.get_player_color(), Color::Black);
         assert!(board.may_castle(Color::Black, true));
@@ -1620,7 +1432,7 @@ mod board_tests {
 
         board.enable_castling(Color::White, true);
 
-        let m = Move::new(Coordinate::H8, Coordinate::H1, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::H8, Coordinate::H1, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::White, true));
         board.apply_move(&m);
@@ -1649,7 +1461,7 @@ mod board_tests {
 
         board.enable_castling(Color::White, false);
 
-        let m = Move::new(Coordinate::A8, Coordinate::A1, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::A8, Coordinate::A1, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::White, false));
         board.apply_move(&m);
@@ -1678,7 +1490,7 @@ mod board_tests {
 
         board.enable_castling(Color::Black, true);
 
-        let m = Move::new(Coordinate::H1, Coordinate::H8, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::H1, Coordinate::H8, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::Black, true));
         board.apply_move(&m);
@@ -1707,7 +1519,7 @@ mod board_tests {
 
         board.enable_castling(Color::Black, false);
 
-        let m = Move::new(Coordinate::A1, Coordinate::A8, enemy_rook, true);
+        let m = Move::new_capture(Coordinate::A1, Coordinate::A8, enemy_rook, PieceType::Rook);
 
         assert!(board.may_castle(Color::Black, false));
         board.apply_move(&m);

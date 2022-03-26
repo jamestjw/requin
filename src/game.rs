@@ -481,8 +481,8 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Bishop,
         };
-        let expected_move = Move::new(Coordinate::E2, Coordinate::F3, piece, false);
-        let alternative_move = Move::new(Coordinate::E2, Coordinate::G4, piece, false);
+        let expected_move = Move::new(Coordinate::E2, Coordinate::F3, piece);
+        let alternative_move = Move::new(Coordinate::E2, Coordinate::G4, piece);
 
         game.current_legal_moves = vec![expected_move, alternative_move];
 
@@ -502,8 +502,8 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Bishop,
         };
-        let move1 = Move::new(Coordinate::E2, Coordinate::F3, piece, false);
-        let move2 = Move::new(Coordinate::E2, Coordinate::G4, piece, false);
+        let move1 = Move::new(Coordinate::E2, Coordinate::F3, piece);
+        let move2 = Move::new(Coordinate::E2, Coordinate::G4, piece);
 
         game.current_legal_moves = vec![move1, move2];
 
@@ -528,8 +528,8 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Knight,
         };
-        let move1 = Move::new(Coordinate::B1, Coordinate::D2, knight1, false);
-        let move2 = Move::new(Coordinate::F3, Coordinate::D2, knight2, false);
+        let move1 = Move::new(Coordinate::B1, Coordinate::D2, knight1);
+        let move2 = Move::new(Coordinate::F3, Coordinate::D2, knight2);
 
         game.current_legal_moves = vec![move1, move2];
 
@@ -604,8 +604,8 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Rook,
         };
-        let move1 = Move::new(Coordinate::B2, Coordinate::C2, rook1, false);
-        let move2 = Move::new(Coordinate::D2, Coordinate::C2, rook2, false);
+        let move1 = Move::new(Coordinate::B2, Coordinate::C2, rook1);
+        let move2 = Move::new(Coordinate::D2, Coordinate::C2, rook2);
 
         game.current_legal_moves = vec![move1, move2];
 
@@ -659,8 +659,8 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Rook,
         };
-        let move1 = Move::new(Coordinate::B2, Coordinate::B4, rook1, false);
-        let move2 = Move::new(Coordinate::B5, Coordinate::B4, rook2, false);
+        let move1 = Move::new(Coordinate::B2, Coordinate::B4, rook1);
+        let move2 = Move::new(Coordinate::B5, Coordinate::B4, rook2);
 
         game.current_legal_moves = vec![move1, move2];
 
@@ -710,7 +710,7 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let mut expected_move = Move::new(Coordinate::E7, Coordinate::E8, piece, false);
+        let mut expected_move = Move::new(Coordinate::E7, Coordinate::E8, piece);
         expected_move.is_promotion = true;
         expected_move.promotes_to = Some(PieceType::Rook);
         let mut alternative_move = expected_move.clone();
@@ -740,7 +740,7 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let mut expected_move = Move::new(Coordinate::F7, Coordinate::E8, piece, false);
+        let mut expected_move = Move::new(Coordinate::F7, Coordinate::E8, piece);
         expected_move.is_promotion = true;
         expected_move.promotes_to = Some(PieceType::Rook);
         let mut alternative_move = expected_move.clone();
@@ -770,7 +770,7 @@ mod game_tests {
             color: Color::White,
             piece_type: PieceType::Pawn,
         };
-        let mut expected_move = Move::new(Coordinate::F7, Coordinate::E8, piece, false);
+        let mut expected_move = Move::new(Coordinate::F7, Coordinate::E8, piece);
         expected_move.is_promotion = true;
         expected_move.promotes_to = Some(PieceType::Rook);
         let mut alternative_move_1 = expected_move.clone();

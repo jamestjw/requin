@@ -1,7 +1,10 @@
-use super::evaluator::evaluate_board;
-use crate::game::{Game, GameState};
+use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
+use crate::{
+    game::{Game, GameState},
+    generator::generate_non_quiescent_moves,
+};
 
 use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
@@ -17,6 +20,7 @@ pub struct Searcher {
     pub game: Game,
     search_depth: u32,
     num_threads: usize,
+    nodes_searched: u32,
 }
 
 impl Searcher {
@@ -28,6 +32,7 @@ impl Searcher {
             game,
             search_depth,
             num_threads,
+            nodes_searched: 0,
         }
     }
 
@@ -90,8 +95,7 @@ impl Searcher {
         }
 
         if depth == 0 {
-            let offset = if is_white { -1 } else { 1 };
-            return offset * evaluate_board(self.game.current_board());
+            return self.quiesce(alpha, beta, is_white);
         } else if depth == 1 {
             // Futility pruning
             let offset = if is_white { -1 } else { 1 };
@@ -106,6 +110,8 @@ impl Searcher {
         let legal_moves = generate_legal_moves(self.game.current_board());
 
         for m in legal_moves {
+            self.nodes_searched += 1;
+
             self.game.apply_move(m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
@@ -124,6 +130,61 @@ impl Searcher {
         alpha
     }
 
+    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, is_white: bool) -> i32 {
+        let offset = if is_white { -1 } else { 1 };
+        let stand_pat = offset * evaluate_board(self.game.current_board());
+
+        if stand_pat >= beta {
+            return beta;
+        }
+
+        // Delta pruning
+        let big_delta = 900; // Value of a queen
+        if stand_pat < alpha - big_delta {
+            // If giving a side a queen is not good enough,
+            // then we conclude that further searches are futile
+            return alpha;
+        }
+
+        if alpha < stand_pat {
+            alpha = stand_pat;
+        }
+
+        // Sort moves based on SEE
+        let mut non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board())
+            .into_iter()
+            .map(|m| {
+                (
+                    m,
+                    static_exchange_evaluation_capture(self.game.current_board().clone(), &m),
+                )
+            })
+            .collect::<Vec<(Move, i32)>>();
+        non_quiescent_moves.sort_by(|(_, see1), (_, see2)| see2.cmp(see1));
+
+        for (m, see) in non_quiescent_moves {
+            // Prune captures with SEE < 0
+            if see < 0 {
+                break;
+            }
+            self.nodes_searched += 1;
+
+            self.game.apply_move(m);
+            let score = -self.quiesce(-beta, -alpha, !is_white);
+            self.game.undo_move();
+
+            if score >= beta {
+                return beta;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
+        }
+
+        return alpha;
+    }
+
     pub fn apply_best_move(&mut self) {
         match self.get_best_move() {
             Ok(m) => {
@@ -131,5 +192,9 @@ impl Searcher {
             }
             Err(e) => panic!("Unable to apply best move. Error: {}", e),
         }
+    }
+
+    pub fn get_nodes_searched(&self) -> u32 {
+        self.nodes_searched
     }
 }
