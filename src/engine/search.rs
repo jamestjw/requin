@@ -13,7 +13,8 @@ static CHECKMATE_SCORE: i32 = 320000;
 static STALEMATE_SCORE: i32 = 0;
 static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
 static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
-static FUTILITY_MARGIN: i32 = 300; // Equal to the value of a minor piece
+static FUTILITY_MARGIN: i32 = 800; // Equal to the value of a minor piece
+static DELTA_PRUNING_THRESHOLD: i32 = 2538; // Value of a queen
 
 #[derive(Clone)]
 pub struct Searcher {
@@ -139,8 +140,7 @@ impl Searcher {
         }
 
         // Delta pruning
-        let big_delta = 900; // Value of a queen
-        if stand_pat < alpha - big_delta {
+        if stand_pat < alpha - DELTA_PRUNING_THRESHOLD {
             // If giving a side a queen is not good enough,
             // then we conclude that further searches are futile
             return alpha;

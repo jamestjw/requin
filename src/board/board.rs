@@ -6,12 +6,13 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use regex::Regex;
+use strum_macros::EnumIter;
 
 pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 #[repr(usize)]
 #[allow(dead_code)]
-#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum Coordinate {
     A1 = 0,
     B1,
@@ -234,11 +235,18 @@ impl CastlingRights {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Phase {
+    Midgame,
+    Endgame,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Board {
     pieces: [Option<Piece>; 64],
     player_turn: Color,
     castling_rights: CastlingRights,
     en_passant_square: Option<Coordinate>,
+    phase: Phase,
 }
 
 impl Board {
@@ -248,6 +256,7 @@ impl Board {
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
             en_passant_square: None,
+            phase: Phase::Midgame,
         }
     }
 
@@ -654,6 +663,14 @@ impl Board {
     pub fn set_en_passant_square(&mut self, coord: Coordinate) {
         self.en_passant_square = Some(coord);
     }
+
+    pub fn get_game_phase(&self) -> Phase {
+        self.phase
+    }
+
+    pub fn set_endgame_phase(&mut self) {
+        self.phase = Phase::Endgame;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -676,7 +693,7 @@ impl Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum PieceType {
     Pawn,
     Bishop,
