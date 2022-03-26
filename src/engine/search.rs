@@ -1,4 +1,4 @@
-use super::evaluator::{evaluate_board, piece_value_difference};
+use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
 use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 use crate::{
@@ -142,16 +142,23 @@ impl Searcher {
             alpha = stand_pat;
         }
 
-        // Sort moves based on MVV/LVA
-        let mut non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board());
-        non_quiescent_moves.sort_by(|m1, m2| {
-            // Unwrapping the captured piece type is safe since we only have captures
-            piece_value_difference(m2.captured_piece_type.unwrap(), m2.piece.piece_type).cmp(
-                &piece_value_difference(m1.captured_piece_type.unwrap(), m1.piece.piece_type),
-            )
-        });
+        // Sort moves based on SEE
+        let mut non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board())
+            .into_iter()
+            .map(|m| {
+                (
+                    m,
+                    static_exchange_evaluation_capture(self.game.current_board().clone(), &m),
+                )
+            })
+            .collect::<Vec<(Move, i32)>>();
+        non_quiescent_moves.sort_by(|(_, see1), (_, see2)| see2.cmp(see1));
 
-        for m in non_quiescent_moves {
+        for (m, see) in non_quiescent_moves {
+            // Prune captures with SEE < 0
+            if see < 0 {
+                break;
+            }
             self.nodes_searched += 1;
 
             self.game.apply_move(m);

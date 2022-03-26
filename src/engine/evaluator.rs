@@ -170,7 +170,7 @@ pub fn evaluate_board(board: &Board) -> i32 {
     score
 }
 
-pub fn piece_value_difference(p1: PieceType, p2: PieceType) -> i32 {
+fn _piece_value_difference(p1: PieceType, p2: PieceType) -> i32 {
     get_raw_piece_value(p1) - get_raw_piece_value(p2)
 }
 
@@ -220,7 +220,7 @@ fn get_smallest_attacker(board: &Board, square: Coordinate) -> Option<(Piece, Co
 
 // Assume that there is something to be captured on the square
 // This function applies moves to the board without undoing it.
-pub fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
+fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
     if let Some((piece, src)) = get_smallest_attacker(&board, square) {
         let victim_piece_type = board
             .get_from_coordinate(square)
@@ -228,9 +228,19 @@ pub fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
             .piece_type;
         let attacking_move = Move::new_capture(src, square, piece, victim_piece_type);
         board.apply_move(&attacking_move);
-        board.print();
 
         return get_raw_piece_value(victim_piece_type) - static_exchange_evaluation(board, square);
+    } else {
+        return 0;
+    }
+}
+
+pub fn static_exchange_evaluation_capture(mut board: Board, m: &Move) -> i32 {
+    // TODO: Deal with en passant
+    if let Some(victim_piece) = board.get_from_coordinate(m.dest) {
+        board.apply_move(m);
+        return get_raw_piece_value(victim_piece.piece_type)
+            - static_exchange_evaluation(board, m.dest);
     } else {
         return 0;
     }
