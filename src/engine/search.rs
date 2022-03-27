@@ -1,5 +1,4 @@
 use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
-use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 use crate::{
     game::{Game, GameState},

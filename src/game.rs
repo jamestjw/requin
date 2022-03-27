@@ -28,7 +28,7 @@ impl GameState {
 pub struct Game {
     move_list: Vec<Move>,
     board_history: Vec<Board>,
-    current_legal_moves: Vec<Move>, // Legal moves for the current board
+    current_legal_moves: Option<Vec<Move>>, // Legal moves for the current board
     pub state: GameState,
 }
 
@@ -37,7 +37,7 @@ impl Game {
         Game {
             move_list: vec![],
             board_history: vec![starting_board],
-            current_legal_moves: generate_legal_moves(&starting_board),
+            current_legal_moves: Some(generate_legal_moves(&starting_board)),
             state: GameState::InProgress,
         }
     }
@@ -62,7 +62,7 @@ impl Game {
     ) -> Result<Move, &'static str> {
         let mut candidate_moves = vec![];
 
-        for m in &self.current_legal_moves {
+        for m in self.current_legal_moves() {
             if m.piece.piece_type == piece_type
                 && m.dest == dest_coord
                 && m.is_capture == is_capture
@@ -193,7 +193,7 @@ impl Game {
                         "O-O" | "0-0" => {
                             let tmp_m = Move::new_castling(player_color, true);
 
-                            if self.current_legal_moves.contains(&tmp_m) {
+                            if self.current_legal_moves().contains(&tmp_m) {
                                 tmp_m
                             } else {
                                 println!("Error: Illegal move.");
@@ -203,7 +203,7 @@ impl Game {
                         "O-O-O" | "0-0-0" => {
                             let tmp_m = Move::new_castling(player_color, false);
 
-                            if self.current_legal_moves.contains(&tmp_m) {
+                            if self.current_legal_moves().contains(&tmp_m) {
                                 tmp_m
                             } else {
                                 println!("Error: Illegal move.");
@@ -266,11 +266,13 @@ impl Game {
     }
 
     fn generate_legal_moves(&mut self) {
-        self.current_legal_moves = generate_legal_moves(self.current_board());
+        self.current_legal_moves = Some(generate_legal_moves(self.current_board()));
     }
 
     pub fn current_legal_moves(&self) -> &Vec<Move> {
-        &self.current_legal_moves
+        self.current_legal_moves
+            .as_ref()
+            .expect("Attempted to access legal moves before move generation")
     }
 
     // This function should be called before running a game
@@ -285,7 +287,7 @@ impl Game {
         self.move_list.push(m);
         self.generate_legal_moves();
 
-        if self.current_legal_moves.len() == 0 {
+        if self.current_legal_moves().len() == 0 {
             if self.current_board().is_in_check() {
                 match self.current_board().get_player_color() {
                     Color::White => {
@@ -304,7 +306,7 @@ impl Game {
     pub fn undo_move(&mut self) {
         self.move_list.pop();
         self.board_history.pop();
-        self.current_legal_moves = vec![];
+        self.current_legal_moves = None;
         self.state = GameState::InProgress;
     }
 
@@ -488,7 +490,7 @@ mod game_tests {
         let expected_move = Move::new(Coordinate::E2, Coordinate::F3, piece);
         let alternative_move = Move::new(Coordinate::E2, Coordinate::G4, piece);
 
-        game.current_legal_moves = vec![expected_move, alternative_move];
+        game.current_legal_moves = Some(vec![expected_move, alternative_move]);
 
         let found_move = game
             .find_legal_move(PieceType::Bishop, Coordinate::F3, None, None, false, None)
@@ -509,7 +511,7 @@ mod game_tests {
         let move1 = Move::new(Coordinate::E2, Coordinate::F3, piece);
         let move2 = Move::new(Coordinate::E2, Coordinate::G4, piece);
 
-        game.current_legal_moves = vec![move1, move2];
+        game.current_legal_moves = Some(vec![move1, move2]);
 
         match game.find_legal_move(PieceType::Bishop, Coordinate::E3, None, None, false, None) {
             Ok(_) => panic!("Expected an error"),
@@ -535,7 +537,7 @@ mod game_tests {
         let move1 = Move::new(Coordinate::B1, Coordinate::D2, knight1);
         let move2 = Move::new(Coordinate::F3, Coordinate::D2, knight2);
 
-        game.current_legal_moves = vec![move1, move2];
+        game.current_legal_moves = Some(vec![move1, move2]);
 
         // Without specifying which knight
         match game.find_legal_move(PieceType::Knight, Coordinate::D2, None, None, false, None) {
@@ -611,7 +613,7 @@ mod game_tests {
         let move1 = Move::new(Coordinate::B2, Coordinate::C2, rook1);
         let move2 = Move::new(Coordinate::D2, Coordinate::C2, rook2);
 
-        game.current_legal_moves = vec![move1, move2];
+        game.current_legal_moves = Some(vec![move1, move2]);
 
         // Without specifying which rook
         match game.find_legal_move(PieceType::Rook, Coordinate::C2, None, None, false, None) {
@@ -666,7 +668,7 @@ mod game_tests {
         let move1 = Move::new(Coordinate::B2, Coordinate::B4, rook1);
         let move2 = Move::new(Coordinate::B5, Coordinate::B4, rook2);
 
-        game.current_legal_moves = vec![move1, move2];
+        game.current_legal_moves = Some(vec![move1, move2]);
 
         // Without specifying which rook
         match game.find_legal_move(PieceType::Rook, Coordinate::B4, None, None, false, None) {
@@ -720,7 +722,7 @@ mod game_tests {
         let mut alternative_move = expected_move.clone();
         alternative_move.promotes_to = Some(PieceType::Queen);
 
-        game.current_legal_moves = vec![expected_move, alternative_move];
+        game.current_legal_moves = Some(vec![expected_move, alternative_move]);
 
         let found_move = game
             .find_legal_move(
@@ -750,7 +752,7 @@ mod game_tests {
         let mut alternative_move = expected_move.clone();
         alternative_move.promotes_to = Some(PieceType::Queen);
 
-        game.current_legal_moves = vec![expected_move, alternative_move];
+        game.current_legal_moves = Some(vec![expected_move, alternative_move]);
 
         let found_move = game
             .find_legal_move(
@@ -784,12 +786,12 @@ mod game_tests {
         let mut alternative_move_3 = alternative_move_1.clone();
         alternative_move_3.src = Coordinate::D7;
 
-        game.current_legal_moves = vec![
+        game.current_legal_moves = Some(vec![
             expected_move,
             alternative_move_1,
             alternative_move_2,
             alternative_move_3,
-        ];
+        ]);
 
         let found_move = game
             .find_legal_move(
