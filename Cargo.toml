@@ -17,6 +17,8 @@ structopt = "0.3.26"
 exitcode = "1.1.2"
 threadpool = "1.8.1"
 mockall_double = "0.1.0"
+strum = "0.24"
+strum_macros = "0.24"
 
 [dev-dependencies]
 mockall = "0.8.0"

@@ -1,5 +1,4 @@
 use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
-use crate::generator::generate_legal_moves;
 use crate::r#move::Move;
 use crate::{
     game::{Game, GameState},
@@ -13,7 +12,8 @@ static CHECKMATE_SCORE: i32 = 320000;
 static STALEMATE_SCORE: i32 = 0;
 static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
 static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
-static FUTILITY_MARGIN: i32 = 300; // Equal to the value of a minor piece
+static FUTILITY_MARGIN: i32 = 800; // Equal to the value of a minor piece
+static DELTA_PRUNING_THRESHOLD: i32 = 2538; // Value of a queen
 
 #[derive(Clone)]
 pub struct Searcher {
@@ -37,7 +37,7 @@ impl Searcher {
     }
 
     pub fn get_best_move(&mut self) -> Result<Move, &str> {
-        let legal_moves = generate_legal_moves(self.game.current_board());
+        let legal_moves = self.game.current_legal_moves();
         let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
 
@@ -55,6 +55,7 @@ impl Searcher {
             let tx = tx.clone();
             let mut searcher = self.clone();
             let search_depth = self.search_depth - 1;
+            let m = m.clone();
             searcher.game.apply_move(m);
             pool.execute(move || {
                 // Whether a move can be pruned depends on whether it is a capture
@@ -107,11 +108,10 @@ impl Searcher {
             }
         }
 
-        let legal_moves = generate_legal_moves(self.game.current_board());
+        let legal_moves = self.game.current_legal_moves().clone();
 
         for m in legal_moves {
             self.nodes_searched += 1;
-
             self.game.apply_move(m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
@@ -139,8 +139,7 @@ impl Searcher {
         }
 
         // Delta pruning
-        let big_delta = 900; // Value of a queen
-        if stand_pat < alpha - big_delta {
+        if stand_pat < alpha - DELTA_PRUNING_THRESHOLD {
             // If giving a side a queen is not good enough,
             // then we conclude that further searches are futile
             return alpha;

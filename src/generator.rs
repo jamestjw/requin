@@ -4,6 +4,8 @@ use crate::board::{
 };
 use crate::r#move::Move;
 
+use std::convert::TryFrom;
+
 // Generate all legal moves for a particular pawn
 fn generate_pawn_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
@@ -325,17 +327,23 @@ fn is_move_legal(board: &Board, color: Color, m: &Move) -> bool {
 // Generate all moves given a certain board
 pub fn generate_moves(board: &Board) -> Vec<Move> {
     let mut res = vec![];
+    let color = board.get_player_color();
 
-    for (coord, piece) in board.get_player_pieces(board.get_player_color()) {
-        let piece_moves = match piece.piece_type {
-            PieceType::Pawn => generate_pawn_moves(board, coord),
-            PieceType::Knight => generate_knight_moves(board, coord),
-            PieceType::Bishop => generate_bishop_style_moves(board, coord),
-            PieceType::Rook => generate_rook_style_moves(board, coord),
-            PieceType::King => generate_king_moves(board, coord, true),
-            PieceType::Queen => generate_queen_moves(board, coord),
-        };
-        res.extend(piece_moves);
+    for (i, piece) in board.get_pieces().iter().enumerate() {
+        if let Some(piece) = piece {
+            if color == piece.color {
+                let coord = Coordinate::try_from(i).unwrap();
+                let piece_moves = match piece.piece_type {
+                    PieceType::Pawn => generate_pawn_moves(board, coord),
+                    PieceType::Knight => generate_knight_moves(board, coord),
+                    PieceType::Bishop => generate_bishop_style_moves(board, coord),
+                    PieceType::Rook => generate_rook_style_moves(board, coord),
+                    PieceType::King => generate_king_moves(board, coord, true),
+                    PieceType::Queen => generate_queen_moves(board, coord),
+                };
+                res.extend(piece_moves);
+            }
+        }
     }
 
     res
@@ -385,22 +393,28 @@ fn generate_pawn_controlled_squares(board: &Board, src: Coordinate) -> Vec<Coord
 pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<Coordinate> {
     let mut res = vec![];
 
-    for (coord, piece) in board.get_player_pieces(color) {
-        if piece.piece_type == PieceType::Pawn {
-            res.extend(generate_pawn_controlled_squares(board, coord));
-        } else {
-            let piece_moves = match piece.piece_type {
-                PieceType::Knight => generate_knight_moves(board, coord),
-                PieceType::Bishop => generate_bishop_style_moves(board, coord),
-                PieceType::Rook => generate_rook_style_moves(board, coord),
-                PieceType::King => generate_king_moves(board, coord, false),
-                PieceType::Queen => generate_queen_moves(board, coord),
-                _ => panic!("Unexpected piece type."),
-            };
+    for (i, piece) in board.get_pieces().iter().enumerate() {
+        if let Some(piece) = piece {
+            if color == piece.color {
+                let coord = Coordinate::try_from(i).unwrap();
 
-            for piece_move in piece_moves {
-                let dest_square = piece_move.dest;
-                res.push(dest_square)
+                if piece.piece_type == PieceType::Pawn {
+                    res.extend(generate_pawn_controlled_squares(board, coord));
+                } else {
+                    let piece_moves = match piece.piece_type {
+                        PieceType::Knight => generate_knight_moves(board, coord),
+                        PieceType::Bishop => generate_bishop_style_moves(board, coord),
+                        PieceType::Rook => generate_rook_style_moves(board, coord),
+                        PieceType::King => generate_king_moves(board, coord, false),
+                        PieceType::Queen => generate_queen_moves(board, coord),
+                        _ => panic!("Unexpected piece type."),
+                    };
+
+                    for piece_move in piece_moves {
+                        let dest_square = piece_move.dest;
+                        res.push(dest_square)
+                    }
+                }
             }
         }
     }

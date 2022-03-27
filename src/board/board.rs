@@ -1,4 +1,5 @@
 use crate::board::movements::is_square_controlled_by_player;
+use crate::engine::get_raw_piece_value;
 use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
@@ -6,12 +7,13 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use regex::Regex;
+use strum_macros::EnumIter;
 
 pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 #[repr(usize)]
 #[allow(dead_code)]
-#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum Coordinate {
     A1 = 0,
     B1,
@@ -234,11 +236,19 @@ impl CastlingRights {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Phase {
+    Midgame,
+    Endgame,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Board {
     pieces: [Option<Piece>; 64],
     player_turn: Color,
     castling_rights: CastlingRights,
     en_passant_square: Option<Coordinate>,
+    // Non-pawn material
+    npm: i32, // Note: Caching this to avoid constant recalculation
 }
 
 impl Board {
@@ -248,6 +258,7 @@ impl Board {
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
             en_passant_square: None,
+            npm: 0,
         }
     }
 
@@ -296,6 +307,7 @@ impl Board {
             board.place_piece(coord, Piece::new(color, piece_type));
         }
 
+        board.update_npm();
         board
     }
 
@@ -332,36 +344,8 @@ impl Board {
         return self.pieces[coordinate as usize];
     }
 
-    pub fn get_all_pieces(&self) -> Vec<(Coordinate, &Piece)> {
-        let mut res = vec![];
-
-        for (coord, piece) in self.pieces.iter().enumerate() {
-            match piece {
-                Some(piece) => {
-                    res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
-                }
-                None => {}
-            }
-        }
-
-        return res;
-    }
-
-    pub fn get_player_pieces(&self, color: Color) -> Vec<(Coordinate, &Piece)> {
-        let mut res = vec![];
-
-        for (coord, piece) in self.pieces.iter().enumerate() {
-            match piece {
-                Some(piece) => {
-                    if color == piece.color {
-                        res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
-                    }
-                }
-                None => {}
-            }
-        }
-
-        return res;
+    pub fn get_pieces(&self) -> &[Option<Piece>] {
+        &self.pieces
     }
 
     pub fn get_player_color(&self) -> Color {
@@ -447,9 +431,17 @@ impl Board {
             let dest_piece = self.pieces[m.dest as usize].replace(original_piece.unwrap());
 
             // Remove captured piece during en passant capture
-            if m.is_capture && m.is_en_passant {
-                let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
-                self.pieces[to_remove_square as usize] = None;
+            if m.is_capture {
+                // Reduce non pawn material
+                let captured_piece_type = m.captured_piece_type.unwrap();
+                if captured_piece_type != PieceType::Pawn {
+                    self.npm -= get_raw_piece_value(m.captured_piece_type.unwrap(), Phase::Midgame);
+                }
+
+                if m.is_en_passant {
+                    let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
+                    self.pieces[to_remove_square as usize] = None;
+                }
             }
 
             match m.promotes_to {
@@ -457,6 +449,7 @@ impl Board {
                     let mut promoted_piece = original_piece.unwrap();
                     promoted_piece.piece_type = ppt;
                     self.pieces[m.dest as usize] = Some(promoted_piece);
+                    self.npm += get_raw_piece_value(ppt, Phase::Midgame);
                 }
                 None => {}
             }
@@ -654,6 +647,14 @@ impl Board {
     pub fn set_en_passant_square(&mut self, coord: Coordinate) {
         self.en_passant_square = Some(coord);
     }
+
+    pub fn update_npm(&mut self) {
+        self.npm = crate::engine::non_pawn_material(self);
+    }
+
+    pub fn get_npm(&self) -> i32 {
+        self.npm
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -676,7 +677,7 @@ impl Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum PieceType {
     Pawn,
     Bishop,
