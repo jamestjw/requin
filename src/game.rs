@@ -37,7 +37,7 @@ impl Game {
         Game {
             move_list: vec![],
             board_history: vec![starting_board],
-            current_legal_moves: vec![],
+            current_legal_moves: generate_legal_moves(&starting_board),
             state: GameState::InProgress,
         }
     }
@@ -267,6 +267,10 @@ impl Game {
 
     fn generate_legal_moves(&mut self) {
         self.current_legal_moves = generate_legal_moves(self.current_board());
+    }
+
+    pub fn current_legal_moves(&self) -> &Vec<Move> {
+        &self.current_legal_moves
     }
 
     // This function should be called before running a game

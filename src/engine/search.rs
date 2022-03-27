@@ -38,7 +38,7 @@ impl Searcher {
     }
 
     pub fn get_best_move(&mut self) -> Result<Move, &str> {
-        let legal_moves = generate_legal_moves(self.game.current_board());
+        let legal_moves = self.game.current_legal_moves();
         let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
 
@@ -56,6 +56,7 @@ impl Searcher {
             let tx = tx.clone();
             let mut searcher = self.clone();
             let search_depth = self.search_depth - 1;
+            let m = m.clone();
             searcher.game.apply_move(m);
             pool.execute(move || {
                 // Whether a move can be pruned depends on whether it is a capture
@@ -108,11 +109,10 @@ impl Searcher {
             }
         }
 
-        let legal_moves = generate_legal_moves(self.game.current_board());
+        let legal_moves = self.game.current_legal_moves().clone();
 
         for m in legal_moves {
             self.nodes_searched += 1;
-
             self.game.apply_move(m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
