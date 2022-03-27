@@ -29,9 +29,9 @@ impl Score {
 // First row is the first rank, first column is the A file
 static WHITE_PAWN_POSITIONAL_VALUE: [[Score; 8]; 8] = [
     [ Score( 0,  0), Score(  0,   0), Score(  0,   0), Score(  0,  0), Score( 0,   0), Score(0, 0), Score(0, 0), Score(0, 0)], 
-    [ Score( 2, -8), Score(  4,  -6), Score( 11,   9), Score( 18,  5), Score(16,  16), Score(21, 6), Score(9, -6), Score(-3, -18)], 
-    [ Score(-9, -9), Score(-15,  -7), Score( 11, -10), Score( 15,  5), Score(31,   2), Score(23, 3), Score(6, -8), Score(-20, -5)], 
-    [ Score(-3,  7), Score(-20,   1), Score(  8,  -8), Score( 19, -2), Score(39, -14), Score(17, -13), Score(2, -11), Score(-5, -6)], 
+    [ Score( 2, -8), Score(  4,  -6), Score( 11,   9), Score( 16,  5), Score(16,  16), Score(21, 6), Score(9, -6), Score(-3, -18)], 
+    [ Score(-9, -9), Score(-15,  -7), Score( 11, -10), Score( 25,  5), Score(31,   2), Score(23, 3), Score(6, -8), Score(-20, -5)], 
+    [ Score(-3,  7), Score(-20,   1), Score(  8,  -8), Score( 35, -2), Score(39, -14), Score(17, -13), Score(2, -11), Score(-5, -6)], 
     [ Score(11, 12), Score( -4,   6), Score(-11,   2), Score(  2, -6), Score(11,  -5), Score(0, -4), Score(-12, 14), Score(5, 9)], 
     [ Score( 3, 27), Score(-11,  18), Score( -6,  19), Score( 22, 29), Score(-8,  30), Score(-5, 9), Score(-14, 8), Score(-11, 14)], 
     [ Score(-7, -1), Score(  6, -14), Score( -2,  13), Score(-11, 22), Score( 4,  24), Score(-14, 17), Score(10, 7), Score(-9, 7)], 
@@ -63,10 +63,20 @@ static WHITE_BISHOP_POSITIONAL_VALUE: [[Score; 8]; 8] = [
 ];
 
 #[rustfmt::skip]
+// static WHITE_KNIGHT_POSITIONAL_VALUE: [[Score; 8]; 8] = [ 
+//     [ Score(-175,  -96), Score(-92, -65), Score(-74, -49), Score(-73, -21), Score(-73, -21), Score(-74, -49), Score(-92, -65), Score(-175,  -96) ],
+//     [ Score( -77,  -67), Score(-41, -54), Score(-27, -18), Score(-15,   8), Score(-15,   8), Score(-27, -18), Score(-41, -54), Score( -77,  -67) ],
+//     [ Score( -61,  -40), Score(-17, -27), Score(  6,  -8), Score( 12,  29), Score( 12,  29), Score(  6,  -8), Score(-17, -27), Score( -61,  -40) ],
+//     [ Score( -35,  -35), Score(  8,  -2), Score( 40,  13), Score( 49,  28), Score( 49,  28), Score( 40,  13), Score(  8,  -2), Score( -35,  -35) ],
+//     [ Score( -34,  -45), Score( 13, -16), Score( 44,   9), Score( 51,  39), Score( 51,  39), Score( 44,   9), Score( 13, -16), Score( -34,  -45) ],
+//     [ Score(  -9,  -51), Score( 22, -44), Score( 58, -16), Score( 53,  17), Score( 53,  17), Score( 58, -16), Score( 22, -44), Score(  -9,  -51) ],
+//     [ Score( -67,  -69), Score(-27, -50), Score(  4, -51), Score( 37,  12), Score( 37,  12), Score(  4, -51), Score(-27, -50), Score( -67,  -69) ],
+//     [ Score(-201, -100), Score(-83, -88), Score(-56, -56), Score(-26, -17), Score(-26, -17), Score(-56, -56), Score(-83, -88), Score(-201, -100) ],
+// ];
 static WHITE_KNIGHT_POSITIONAL_VALUE: [[Score; 8]; 8] = [ 
     [ Score(-175,  -96), Score(-92, -65), Score(-74, -49), Score(-73, -21), Score(-73, -21), Score(-74, -49), Score(-92, -65), Score(-175,  -96) ],
     [ Score( -77,  -67), Score(-41, -54), Score(-27, -18), Score(-15,   8), Score(-15,   8), Score(-27, -18), Score(-41, -54), Score( -77,  -67) ],
-    [ Score( -61,  -40), Score(-17, -27), Score(  6,  -8), Score( 12,  29), Score( 12,  29), Score(  6,  -8), Score(-17, -27), Score( -61,  -40) ],
+    [ Score( -61,  -40), Score(-17, -27), Score( 25,  -8), Score( 12,  29), Score( 12,  29), Score( 25,  -8), Score(-17, -27), Score( -61,  -40) ],
     [ Score( -35,  -35), Score(  8,  -2), Score( 40,  13), Score( 49,  28), Score( 49,  28), Score( 40,  13), Score(  8,  -2), Score( -35,  -35) ],
     [ Score( -34,  -45), Score( 13, -16), Score( 44,   9), Score( 51,  39), Score( 51,  39), Score( 44,   9), Score( 13, -16), Score( -34,  -45) ],
     [ Score(  -9,  -51), Score( 22, -44), Score( 58, -16), Score( 53,  17), Score( 53,  17), Score( 58, -16), Score( 22, -44), Score(  -9,  -51) ],
@@ -323,6 +333,8 @@ mod test {
         let test_cases = [
             (Color::White, Coordinate::G2, 6, Phase::Midgame),
             (Color::White, Coordinate::A8, -34, Phase::Midgame),
+            (Color::White, Coordinate::D3, 12, Phase::Midgame),
+            (Color::White, Coordinate::C4, 18, Phase::Midgame),
             (Color::Black, Coordinate::B8, -4, Phase::Midgame),
             (Color::Black, Coordinate::E5, 27, Phase::Midgame),
             (Color::White, Coordinate::C4, 0, Phase::Endgame),
