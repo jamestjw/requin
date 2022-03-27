@@ -65,6 +65,7 @@ impl Searcher {
                     INITIAL_BETA,
                     is_white_turn,
                     !m.is_capture,
+                    1, // Start with search depth 1
                 );
                 tx.send((m, curr_eval))
                     .expect("Unexpected error: Main thread is not receiving.");
@@ -83,21 +84,26 @@ impl Searcher {
     // Alpha-beta pruning in the negamax framework
     pub fn alpha_beta(
         &mut self,
-        depth: u32,
+        remaining_depth: u32,
         mut alpha: i32,
         beta: i32,
         is_white: bool,
         can_prune: bool,
+        mut searched_depth: u32,
     ) -> i32 {
         match self.game.state {
             GameState::InProgress => {}
-            GameState::WhiteWon | GameState::BlackWon => return -CHECKMATE_SCORE,
+            GameState::WhiteWon | GameState::BlackWon => {
+                return -(CHECKMATE_SCORE - searched_depth as i32)
+            }
             GameState::Stalemate => return STALEMATE_SCORE,
         }
 
-        if depth == 0 {
-            return self.quiesce(alpha, beta, is_white);
-        } else if depth == 1 {
+        searched_depth += 1;
+
+        if remaining_depth == 0 {
+            return self.quiesce(alpha, beta, is_white, searched_depth);
+        } else if remaining_depth == 1 {
             // Futility pruning
             let offset = if is_white { -1 } else { 1 };
             let eval = offset * evaluate_board(self.game.current_board());
@@ -115,7 +121,14 @@ impl Searcher {
             self.game.apply_move(m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
-            let score = -self.alpha_beta(depth - 1, -beta, -alpha, !is_white, !m.is_capture);
+            let score = -self.alpha_beta(
+                remaining_depth - 1,
+                -beta,
+                -alpha,
+                !is_white,
+                !m.is_capture,
+                searched_depth,
+            );
             self.game.undo_move();
 
             if score >= beta {
@@ -130,7 +143,23 @@ impl Searcher {
         alpha
     }
 
-    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, is_white: bool) -> i32 {
+    pub fn quiesce(
+        &mut self,
+        mut alpha: i32,
+        beta: i32,
+        is_white: bool,
+        mut searched_depth: u32,
+    ) -> i32 {
+        match self.game.state {
+            GameState::InProgress => {}
+            GameState::WhiteWon | GameState::BlackWon => {
+                return -(CHECKMATE_SCORE - searched_depth as i32)
+            }
+            GameState::Stalemate => return STALEMATE_SCORE,
+        }
+
+        searched_depth += 1;
+
         let offset = if is_white { -1 } else { 1 };
         let stand_pat = offset * evaluate_board(self.game.current_board());
 
@@ -169,7 +198,7 @@ impl Searcher {
             self.nodes_searched += 1;
 
             self.game.apply_move(m);
-            let score = -self.quiesce(-beta, -alpha, !is_white);
+            let score = -self.quiesce(-beta, -alpha, !is_white, searched_depth);
             self.game.undo_move();
 
             if score >= beta {
