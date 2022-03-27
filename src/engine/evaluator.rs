@@ -5,6 +5,10 @@ use crate::r#move::Move;
 use lazy_static::lazy_static;
 use strum::IntoEnumIterator;
 
+static MIDGAME_PHASE_LIMIT: i32 = 15258; // Upper bound of midgame material value
+static ENDGAME_PHASE_LIMIT: i32 = 3915; // Lower bound of endgame material value
+static MIDGAME_SCALE: i32 = 128;
+
 #[derive(Debug, Clone, Copy)]
 struct Score(i32, i32);
 
@@ -375,12 +379,25 @@ fn get_piece_value(color: Color, piece_type: PieceType, coord: Coordinate, phase
     }
 }
 
+// Returns something between 0 and MIDGAME_SCALE, the more pieces there are
+// the higher the value is
+fn calculate_phase(board: &Board) -> i32 {
+    let npm = ENDGAME_PHASE_LIMIT.max(MIDGAME_PHASE_LIMIT.min(board.get_npm()));
+    return ((npm - ENDGAME_PHASE_LIMIT) * MIDGAME_SCALE)
+        / (MIDGAME_PHASE_LIMIT - ENDGAME_PHASE_LIMIT);
+}
+
 pub fn evaluate_board(board: &Board) -> i32 {
-    let mut score = 0;
+    let mut midgame_score = 0;
+    let mut endgame_score = 0;
+
+    let phase = calculate_phase(board);
+
     for (coord, piece) in board.get_all_pieces() {
-        score += get_piece_value(piece.color, piece.piece_type, coord, board.get_game_phase());
+        midgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Midgame);
+        endgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Endgame);
     }
-    score
+    (midgame_score * phase + (endgame_score * (MIDGAME_SCALE - phase))) / MIDGAME_SCALE
 }
 
 // Finds the piece with the least value that is attacking
@@ -438,7 +455,7 @@ fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
         let attacking_move = Move::new_capture(src, square, piece, victim_piece_type);
         board.apply_move(&attacking_move);
 
-        return get_raw_piece_value(victim_piece_type, board.get_game_phase())
+        return get_raw_piece_value(victim_piece_type, Phase::Midgame)
             - static_exchange_evaluation(board, square);
     } else {
         return 0;
@@ -449,11 +466,21 @@ pub fn static_exchange_evaluation_capture(mut board: Board, m: &Move) -> i32 {
     // TODO: Deal with en passant
     if let Some(victim_piece) = board.get_from_coordinate(m.dest) {
         board.apply_move(m);
-        return get_raw_piece_value(victim_piece.piece_type, board.get_game_phase())
+        return get_raw_piece_value(victim_piece.piece_type, Phase::Midgame)
             - static_exchange_evaluation(board, m.dest);
     } else {
         return 0;
     }
+}
+
+pub fn non_pawn_material(board: &Board) -> i32 {
+    let mut val = 0;
+    for (_, piece) in board.get_all_pieces() {
+        if piece.piece_type != PieceType::Pawn {
+            val += get_raw_piece_value(piece.piece_type, Phase::Midgame);
+        }
+    }
+    val
 }
 
 #[cfg(test)]
@@ -611,7 +638,7 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Pawn, board.get_game_phase())
+            get_raw_piece_value(PieceType::Pawn, Phase::Midgame)
         );
     }
 
@@ -629,8 +656,8 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Pawn, board.get_game_phase())
-                - get_raw_piece_value(PieceType::Knight, board.get_game_phase())
+            get_raw_piece_value(PieceType::Pawn, Phase::Midgame)
+                - get_raw_piece_value(PieceType::Knight, Phase::Midgame)
         );
     }
 
@@ -649,7 +676,43 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Knight, board.get_game_phase())
+            get_raw_piece_value(PieceType::Knight, Phase::Midgame)
         );
+    }
+
+    #[test]
+    fn phase_calculation_with_full_board() {
+        let board = Board::new_starting_pos();
+        assert_eq!(calculate_phase(&board), MIDGAME_SCALE);
+    }
+
+    #[test]
+    fn phase_calculation_with_empty_board() {
+        let board = Board::new_empty();
+        assert_eq!(calculate_phase(&board), 0);
+    }
+
+    #[test]
+    fn calculate_non_pawn_material() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Coordinate::D4),
+            (PieceType::Queen, Coordinate::A8),
+            (PieceType::Rook, Coordinate::E1),
+            (PieceType::Bishop, Coordinate::C2),
+            (PieceType::Knight, Coordinate::G3),
+            (PieceType::Pawn, Coordinate::F3),
+        ];
+        for (p, coord) in pieces {
+            board.place_piece(coord, Piece::new(Color::White, p));
+        }
+
+        assert_eq!(
+            non_pawn_material(&board),
+            get_raw_piece_value(PieceType::Queen, Phase::Midgame)
+                + get_raw_piece_value(PieceType::Rook, Phase::Midgame)
+                + get_raw_piece_value(PieceType::Bishop, Phase::Midgame)
+                + get_raw_piece_value(PieceType::Knight, Phase::Midgame)
+        )
     }
 }

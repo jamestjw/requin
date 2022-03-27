@@ -246,7 +246,8 @@ pub struct Board {
     player_turn: Color,
     castling_rights: CastlingRights,
     en_passant_square: Option<Coordinate>,
-    phase: Phase,
+    // Non-pawn material
+    npm: i32, // Note: Caching this to avoid constant recalculation
 }
 
 impl Board {
@@ -256,7 +257,7 @@ impl Board {
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
             en_passant_square: None,
-            phase: Phase::Midgame,
+            npm: 0,
         }
     }
 
@@ -305,6 +306,7 @@ impl Board {
             board.place_piece(coord, Piece::new(color, piece_type));
         }
 
+        board.update_npm();
         board
     }
 
@@ -576,6 +578,9 @@ impl Board {
         };
 
         self.player_turn = self.get_opposing_player_color();
+
+        // TODO: Find a more efficient way of doing this
+        self.update_npm();
     }
 
     pub fn apply_move_with_src_dest(
@@ -664,12 +669,12 @@ impl Board {
         self.en_passant_square = Some(coord);
     }
 
-    pub fn get_game_phase(&self) -> Phase {
-        self.phase
+    pub fn update_npm(&mut self) {
+        self.npm = crate::engine::non_pawn_material(self);
     }
 
-    pub fn set_endgame_phase(&mut self) {
-        self.phase = Phase::Endgame;
+    pub fn get_npm(&self) -> i32 {
+        self.npm
     }
 }
 
