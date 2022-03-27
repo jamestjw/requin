@@ -343,36 +343,8 @@ impl Board {
         return self.pieces[coordinate as usize];
     }
 
-    pub fn get_all_pieces(&self) -> Vec<(Coordinate, &Piece)> {
-        let mut res = vec![];
-
-        for (coord, piece) in self.pieces.iter().enumerate() {
-            match piece {
-                Some(piece) => {
-                    res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
-                }
-                None => {}
-            }
-        }
-
-        return res;
-    }
-
-    pub fn get_player_pieces(&self, color: Color) -> Vec<(Coordinate, &Piece)> {
-        let mut res = vec![];
-
-        for (coord, piece) in self.pieces.iter().enumerate() {
-            match piece {
-                Some(piece) => {
-                    if color == piece.color {
-                        res.push((Coordinate::try_from(coord as usize).unwrap(), piece));
-                    }
-                }
-                None => {}
-            }
-        }
-
-        return res;
+    pub fn get_pieces(&self) -> &[Option<Piece>] {
+        &self.pieces
     }
 
     pub fn get_player_color(&self) -> Color {

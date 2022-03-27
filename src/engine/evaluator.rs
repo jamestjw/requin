@@ -3,6 +3,7 @@ use crate::board::{Board, Color, Coordinate, Phase, Piece, PieceType};
 use crate::r#move::Move;
 
 use lazy_static::lazy_static;
+use std::convert::TryFrom;
 use strum::IntoEnumIterator;
 
 static MIDGAME_PHASE_LIMIT: i32 = 15258; // Upper bound of midgame material value
@@ -393,9 +394,12 @@ pub fn evaluate_board(board: &Board) -> i32 {
 
     let phase = calculate_phase(board);
 
-    for (coord, piece) in board.get_all_pieces() {
-        midgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Midgame);
-        endgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Endgame);
+    for (i, piece) in board.get_pieces().iter().enumerate() {
+        if let Some(piece) = piece {
+            let coord = Coordinate::try_from(i).unwrap();
+            midgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Midgame);
+            endgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Endgame);
+        }
     }
     (midgame_score * phase + (endgame_score * (MIDGAME_SCALE - phase))) / MIDGAME_SCALE
 }
@@ -475,9 +479,11 @@ pub fn static_exchange_evaluation_capture(mut board: Board, m: &Move) -> i32 {
 
 pub fn non_pawn_material(board: &Board) -> i32 {
     let mut val = 0;
-    for (_, piece) in board.get_all_pieces() {
-        if piece.piece_type != PieceType::Pawn {
-            val += get_raw_piece_value(piece.piece_type, Phase::Midgame);
+    for piece in board.get_pieces() {
+        if let Some(piece) = piece {
+            if piece.piece_type != PieceType::Pawn {
+                val += get_raw_piece_value(piece.piece_type, Phase::Midgame);
+            }
         }
     }
     val
