@@ -1,4 +1,5 @@
 use crate::board::movements::is_square_controlled_by_player;
+use crate::engine::get_raw_piece_value;
 use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
@@ -430,9 +431,17 @@ impl Board {
             let dest_piece = self.pieces[m.dest as usize].replace(original_piece.unwrap());
 
             // Remove captured piece during en passant capture
-            if m.is_capture && m.is_en_passant {
-                let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
-                self.pieces[to_remove_square as usize] = None;
+            if m.is_capture {
+                // Reduce non pawn material
+                let captured_piece_type = m.captured_piece_type.unwrap();
+                if captured_piece_type != PieceType::Pawn {
+                    self.npm -= get_raw_piece_value(m.captured_piece_type.unwrap(), Phase::Midgame);
+                }
+
+                if m.is_en_passant {
+                    let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
+                    self.pieces[to_remove_square as usize] = None;
+                }
             }
 
             match m.promotes_to {
@@ -440,6 +449,7 @@ impl Board {
                     let mut promoted_piece = original_piece.unwrap();
                     promoted_piece.piece_type = ppt;
                     self.pieces[m.dest as usize] = Some(promoted_piece);
+                    self.npm += get_raw_piece_value(ppt, Phase::Midgame);
                 }
                 None => {}
             }
@@ -550,9 +560,6 @@ impl Board {
         };
 
         self.player_turn = self.get_opposing_player_color();
-
-        // TODO: Find a more efficient way of doing this
-        self.update_npm();
     }
 
     pub fn apply_move_with_src_dest(
