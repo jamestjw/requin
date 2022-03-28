@@ -157,6 +157,11 @@ impl Coordinate {
         return Coordinate::try_from(offset_val).expect("Invalid coordinate");
     }
 
+    pub fn offset(&self, delta: i8) -> Coordinate {
+        let coord = *self as i8 + delta;
+        Coordinate::try_from(coord as usize).expect("Invalid coordinate")
+    }
+
     // Returns value 1..=8 corresponding to the rank of the square
     pub fn get_rank(&self) -> usize {
         (*self as usize / 8) + 1
@@ -213,6 +218,10 @@ impl Coordinate {
 
     pub fn file_difference(&self, coord: Coordinate) -> i8 {
         return self.get_file() as i8 - coord.get_file() as i8;
+    }
+
+    pub fn is_valid(coord: i8) -> bool {
+        coord >= 0 && coord < 64
     }
 }
 
