@@ -29,11 +29,11 @@ impl Score {
 // First row is the first rank, first column is the A file
 static WHITE_PAWN_POSITIONAL_VALUE: [[Score; 8]; 8] = [
     [ Score( 0,  0), Score(  0,   0), Score(  0,   0), Score(  0,  0), Score( 0,   0), Score(0, 0), Score(0, 0), Score(0, 0)], 
-    [ Score( 2, -8), Score(  4,  -6), Score( 11,   9), Score( 16,  5), Score(16,  16), Score(21, 6), Score(9, -6), Score(-3, -18)], 
-    [ Score(-9, -9), Score(-15,  -7), Score( 11, -10), Score( 25,  5), Score(31,   2), Score(23, 3), Score(6, -8), Score(-20, -5)], 
-    [ Score(-3,  7), Score(-20,   1), Score(  8,  -8), Score( 35, -2), Score(39, -14), Score(17, -13), Score(2, -11), Score(-5, -6)], 
+    [ Score( 2, -8), Score(  2,  -6), Score( 11,   9), Score( 16,  5), Score(16,  16), Score(21, 6), Score(9, -6), Score(-3, -18)], 
+    [ Score( 5, -9), Score(  5,  -7), Score( 11, -10), Score( 25,  5), Score(31,   2), Score(23, 3), Score(6, -8), Score(-20, -5)], 
+    [ Score(10,  7), Score( 10,   1), Score( 15,  -8), Score( 35, -2), Score(39, -14), Score(17, -13), Score(2, -11), Score(-5, -6)], 
     [ Score(11, 12), Score( -4,   6), Score(-11,   2), Score(  2, -6), Score(11,  -5), Score(0, -4), Score(-12, 14), Score(5, 9)], 
-    [ Score( 3, 27), Score(-11,  18), Score( -6,  19), Score( 22, 29), Score(-8,  30), Score(-5, 9), Score(-14, 8), Score(-11, 14)], 
+    [ Score(12, 27), Score(-11,  18), Score( -6,  19), Score( 22, 29), Score(-8,  30), Score(-5, 9), Score(-14, 8), Score(-11, 14)], 
     [ Score(-7, -1), Score(  6, -14), Score( -2,  13), Score(-11, 22), Score( 4,  24), Score(-14, 17), Score(10, 7), Score(-9, 7)], 
     [ Score( 0,  0), Score(  0,   0), Score(  0,   0), Score(  0,  0), Score( 0,   0), Score(0, 0), Score(0, 0), Score(0, 0)]
 ];
