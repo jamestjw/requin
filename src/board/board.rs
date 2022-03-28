@@ -1,6 +1,8 @@
-use crate::board::movements::is_square_controlled_by_player;
+use crate::board::movements::{is_square_controlled_by_player};
+use crate::bitboard::{Bitboard, get_bb_for_coordinate};
 use crate::engine::get_raw_piece_value;
 use crate::r#move::{CastlingSide, Move};
+use crate::log_2;
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
@@ -223,6 +225,14 @@ impl Coordinate {
     pub fn is_valid(coord: i8) -> bool {
         coord >= 0 && coord < 64
     }
+
+    pub fn to_bb(&self) -> Bitboard {
+        get_bb_for_coordinate(*self)
+    }
+
+    pub fn from_bb(b: Bitboard) -> Self {
+        Coordinate::try_from(log_2(b)).unwrap()
+    }
 }
 
 bitfield! {
@@ -252,6 +262,9 @@ pub enum Phase {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Board {
+
+    piece_type_bbs: [Bitboard; 6],
+    piece_color_bbs: [Bitboard; 2],
     pieces: [Option<Piece>; 64],
     player_turn: Color,
     castling_rights: CastlingRights,
@@ -263,6 +276,8 @@ pub struct Board {
 impl Board {
     pub fn new_empty() -> Board {
         Board {
+            piece_type_bbs: [0; 6],
+            piece_color_bbs: [0; 2],
             pieces: [None; 64],
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
@@ -664,6 +679,18 @@ impl Board {
     pub fn get_npm(&self) -> i32 {
         self.npm
     }
+
+    pub fn get_all_pieces_bb(&self) -> Bitboard {
+        // TODO: Maybe add a 7th piece type to represent all piece types
+        self.piece_color_bbs[0] | self.piece_color_bbs[1] 
+    }
+
+    pub fn get_color_bb(&self, color: Color) -> Bitboard {
+        match color {
+            Color::White => self.piece_color_bbs[0],
+            Color::Black => self.piece_color_bbs[1],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -914,6 +941,11 @@ mod coord_tests {
         assert_eq!(Coordinate::E4.to_algebraic_notation(), "e4".to_string());
         assert_eq!(Coordinate::F5.to_algebraic_notation(), "f5".to_string());
         assert_eq!(Coordinate::C8.to_algebraic_notation(), "c8".to_string());
+    }
+
+    #[test]
+    fn conversion_to_and_from_bb() {
+        assert_eq!(Coordinate::from_bb(Coordinate::E4.to_bb()), Coordinate::E4);
     }
 }
 

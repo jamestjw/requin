@@ -3,6 +3,7 @@ use crate::board::{
     Board, Color, Coordinate, Direction, PieceType, ADJACENCY_TABLE, KNIGHT_MOVES_TABLE,
 };
 use crate::r#move::Move;
+use crate::bitboard::*;
 
 use std::convert::TryFrom;
 
@@ -147,34 +148,37 @@ fn generate_knight_moves(board: &Board, src: Coordinate) -> Vec<Move> {
 
 fn generate_rook_style_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
+
+    let src_bb = get_bb_for_coordinate(src);
+    let occupied = board.get_all_pieces_bb();
+    let opposite_color_bb = board.get_color_bb(piece.color.other_color());
+    let mut attacks = get_sliding_attacks_by_magic(PieceType::Rook, src, occupied);
+
     let mut res = vec![];
 
-    for dir in Direction::horizontal_vertical_iterator() {
-        let mut curr_square = src;
+    loop {
+        let (dest, popped_attacks) = pop_lsb(attacks);
+        let dest_square = Coordinate::from_bb(dest);
 
-        loop {
-            if let Some(dest_square) = ADJACENCY_TABLE.get(curr_square, *dir) {
-                // Check if square is occupied
-                if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
-                    // Add a move for the capture of an opposing color piece
-                    if occupying_piece.color != piece.color {
-                        res.push(Move::new_capture(
-                            src,
-                            dest_square,
-                            piece,
-                            occupying_piece.piece_type,
-                        ));
-                    }
-
-                    // The rook may not jump over a piece hence we stop the search
-                    break;
-                } else {
-                    res.push(Move::new(src, dest_square, piece));
-                    curr_square = dest_square;
-                }
-            } else {
-                break;
-            }
+        // Check if the dest square is occupied
+        if (occupied & dest) != 0 {
+            // Check if it is occupied by an enemy piece
+            if (opposite_color_bb & dest != 0) {
+                res.push(Move::new_capture(
+                    src,
+                    dest_square,
+                    piece,
+                    PieceType::Rook, // TODO: Fix this
+                ));
+            } 
+        } else {
+            res.push(Move::new(src, dest_square, piece));
+        }
+        
+        
+        attacks = popped_attacks;
+        if attacks == 0 {
+            break;
         }
     }
 

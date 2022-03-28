@@ -76,3 +76,24 @@ pub fn run_uci() {
     let mut uci_client = Client::new();
     uci_client.run();
 }
+
+const fn num_bits<T>() -> usize { std::mem::size_of::<T>() * 8 }
+
+fn log_2(x: u64) -> usize {
+    assert!(x > 0);
+    num_bits::<u64>() as usize - x.leading_zeros()  as usize - 1
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_log_2() {
+        assert_eq!(log_2(1), 0);
+        assert_eq!(log_2(2), 1);
+        assert_eq!(log_2(3), 1);
+        assert_eq!(log_2(4), 2);
+        assert_eq!(log_2(8), 3);
+    }
+}
