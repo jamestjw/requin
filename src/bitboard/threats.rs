@@ -3,6 +3,7 @@ use crate::board::*;
 
 use lazy_static::lazy_static;
 use rand::Rng;
+use std::boxed::Box;
 use std::slice::Iter;
 use strum::IntoEnumIterator;
 
@@ -58,20 +59,21 @@ impl Magic {
 }
 
 lazy_static! {
-    static ref BISHOP_MAGICS: ([Magic; 64], [Bitboard; 0x1480]) = {
-        let mut table = [0; 0x1480];
+    static ref BISHOP_MAGICS: ([Magic; 64], Box<[u64]>) = {
+        let table: Vec<Bitboard> = vec![0; 0x1480];
+        let mut table = table.into_boxed_slice();
         let magics = init_magics(PieceType::Bishop, &mut table);
         (magics, table)
     };
-    static ref ROOK_MAGICS: ([Magic; 64], [Bitboard; 0x19000]) = {
-        // TODO: 0x19000 might cause a stack overflow
-        let mut table = [0; 0x19000];
+    static ref ROOK_MAGICS: ([Magic; 64], Box<[u64]>) = {
+        let table: Vec<Bitboard> = vec![0; 0x19000];
+        let mut table = table.into_boxed_slice();
         let magics = init_magics(PieceType::Rook, &mut table);
         (magics, table)
     };
 }
 
-fn init_magics(piece_type: PieceType, table: &mut [Bitboard]) -> ([Magic; 64]) {
+fn init_magics(piece_type: PieceType, table: &mut Box<[u64]>) -> ([Magic; 64]) {
     // TODO: Is there a way to create an array without initialization?
     let mut magics = [Magic::new(); 64];
     let mut current_offset = 0;
@@ -134,7 +136,7 @@ fn random_u64_fewbits() -> u64 {
 }
 
 // Inspired by https://www.chessprogramming.org/index.php?title=Looking_for_Magics
-fn find_magic(m: &mut Magic, attacks: &[Bitboard], occupancy: &[Bitboard], table: &mut [Bitboard]) {
+fn find_magic(m: &mut Magic, attacks: &[Bitboard], occupancy: &[Bitboard], table: &mut Box<[u64]>) {
     let n = m.mask.count_ones();
     let mut epochs = [0; 4096];
     let mut current_epoch = 0;
@@ -212,7 +214,6 @@ pub fn get_sliding_attacks_by_magic(
             let m = BISHOP_MAGICS.0[square as usize];
             let index = m.index(occupied);
             BISHOP_MAGICS.1[m.attacks_offset + index]
-            // 0
         }
         PieceType::Rook => {
             let m = ROOK_MAGICS.0[square as usize];
