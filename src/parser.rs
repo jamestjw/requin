@@ -83,7 +83,7 @@ pub fn parse_fen(fen_str: String) -> Result<Board, &'static str> {
                 board.set_en_passant_square(Coordinate::new_from_algebraic_notation(&matches[4]));
             }
 
-            board.update_npm();
+            board.init();
 
             Ok(board)
         }

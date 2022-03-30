@@ -1,6 +1,8 @@
-use crate::bitboard::{get_bb_for_coordinate, set_bitboard, unset_bitboard, Bitboard};
-use crate::board::movements::is_square_controlled_by_player;
+use crate::bitboard::{
+    get_bb_for_coordinate, set_bitboard, sliding_attack_blockers, unset_bitboard, Bitboard,
+};
 use crate::engine::get_raw_piece_value;
+use crate::generator::get_attackers_of_square_bb;
 use crate::log_2;
 use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
@@ -265,6 +267,8 @@ pub struct Board {
     piece_type_bbs: [Bitboard; 6],
     piece_color_bbs: [Bitboard; 2],
     pieces: [Option<Piece>; 64],
+    king_shields: [Bitboard; 2], // Pieces on these squares shield the king from attacks
+    checkers: Bitboard,          // Pieces that are checking the king this turn
     player_turn: Color,
     castling_rights: CastlingRights,
     en_passant_square: Option<Coordinate>,
@@ -278,6 +282,8 @@ impl Board {
             piece_type_bbs: [0; 6],
             piece_color_bbs: [0; 2],
             pieces: [None; 64],
+            king_shields: [0; 2],
+            checkers: 0,
             player_turn: Color::White,
             castling_rights: CastlingRights::new_with_all_disabled(),
             en_passant_square: None,
@@ -330,7 +336,7 @@ impl Board {
             board.place_piece(coord, Piece::new(color, piece_type));
         }
 
-        board.update_npm();
+        board.init();
         board
     }
 
@@ -613,6 +619,8 @@ impl Board {
         };
 
         self.player_turn = self.get_opposing_player_color();
+
+        self.update_board_state();
     }
 
     pub fn apply_move_with_src_dest(
@@ -671,24 +679,8 @@ impl Board {
         Ok(())
     }
 
-    pub fn get_king_coordinate(&self, color: Color) -> Coordinate {
-        for (i, piece) in self.pieces.iter().enumerate() {
-            match piece {
-                Some(piece) => {
-                    if piece.color == color && piece.piece_type == PieceType::King {
-                        return Coordinate::try_from(i as usize).unwrap();
-                    }
-                }
-                None => {}
-            }
-        }
-
-        panic!("Missing {:?} king on the board", color);
-    }
-
     pub fn is_in_check(&self) -> bool {
-        let king_coord = self.get_king_coordinate(self.get_player_color());
-        is_square_controlled_by_player(self, self.get_opposing_player_color(), king_coord)
+        self.checkers != 0
     }
 
     // If a pawn can capture this square, it means that it is
@@ -715,10 +707,87 @@ impl Board {
     }
 
     pub fn get_color_bb(&self, color: Color) -> Bitboard {
-        match color {
-            Color::White => self.piece_color_bbs[0],
-            Color::Black => self.piece_color_bbs[1],
+        self.piece_color_bbs[color as usize]
+    }
+
+    pub fn get_piece_type_bb(&self, pt: PieceType) -> Bitboard {
+        self.piece_type_bbs[pt as usize]
+    }
+
+    pub fn get_piece_types_bb(&self, pt1: PieceType, pt2: PieceType) -> Bitboard {
+        self.piece_type_bbs[pt1 as usize] | self.piece_type_bbs[pt2 as usize]
+    }
+
+    pub fn get_piece_type_bb_for_color(&self, pt: PieceType, color: Color) -> Bitboard {
+        self.piece_type_bbs[pt as usize] & self.piece_color_bbs[color as usize]
+    }
+
+    pub fn get_piece_types_bb_for_color(
+        &self,
+        pt1: PieceType,
+        pt2: PieceType,
+        color: Color,
+    ) -> Bitboard {
+        (self.piece_type_bbs[pt1 as usize] | self.piece_type_bbs[pt2 as usize])
+            & self.piece_color_bbs[color as usize]
+    }
+
+    pub fn get_king_coordinate(&self, color: Color) -> Option<Coordinate> {
+        let king = self.get_piece_type_bb(PieceType::King) & self.get_color_bb(color);
+        if king != 0 {
+            Some(Coordinate::from_bb(king))
+        } else {
+            None
         }
+    }
+
+    pub fn init(&mut self) {
+        self.update_npm();
+        self.update_board_state();
+    }
+
+    // This involves calculations when all changes have been made to the board,
+    // i.e. when a new board is setup or when a move has been made.
+    pub fn update_board_state(&mut self) {
+        // Update king shields
+        self.king_shields[Color::White as usize] = match self.get_king_coordinate(Color::White) {
+            Some(king_coord) => sliding_attack_blockers(
+                self.get_piece_types_bb(PieceType::Rook, PieceType::Queen),
+                self.get_piece_types_bb(PieceType::Bishop, PieceType::Queen),
+                self.get_all_pieces_bb(),
+                self.get_color_bb(Color::Black),
+                king_coord,
+            ),
+            None => 0,
+        };
+        self.king_shields[Color::Black as usize] = match self.get_king_coordinate(Color::Black) {
+            Some(king_coord) => sliding_attack_blockers(
+                self.get_piece_types_bb(PieceType::Rook, PieceType::Queen),
+                self.get_piece_types_bb(PieceType::Bishop, PieceType::Queen),
+                self.get_all_pieces_bb(),
+                self.get_color_bb(Color::White),
+                king_coord,
+            ),
+            None => 0,
+        };
+
+        self.checkers = match self.get_king_coordinate(self.get_player_color()) {
+            Some(king_coord) => get_attackers_of_square_bb(
+                self,
+                king_coord,
+                self.get_opposing_player_color(),
+                self.get_all_pieces_bb(),
+            ),
+            None => 0,
+        }
+    }
+
+    pub fn get_king_shields(&self, color: Color) -> Bitboard {
+        self.king_shields[color as usize]
+    }
+
+    pub fn get_checkers(&self) -> Bitboard {
+        self.checkers
     }
 }
 
@@ -1743,5 +1812,77 @@ mod board_tests {
             board.get_from_coordinate(Coordinate::E8).unwrap(),
             Piece::new(Color::White, PieceType::Knight)
         );
+    }
+
+    #[test]
+    fn white_is_in_check_by_queen() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Color::White, Coordinate::E4),
+            (PieceType::Queen, Color::Black, Coordinate::E8),
+        ];
+
+        for (pt, color, coord) in pieces {
+            board.place_piece(coord, Piece::new(color, pt));
+        }
+
+        board.update_board_state();
+
+        assert!(board.is_in_check());
+    }
+
+    #[test]
+    fn white_is_not_in_check_by_queen_with_blocking_piece() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Color::White, Coordinate::E4),
+            (PieceType::Knight, Color::Black, Coordinate::E7),
+            (PieceType::Queen, Color::Black, Coordinate::E8),
+        ];
+
+        for (pt, color, coord) in pieces {
+            board.place_piece(coord, Piece::new(color, pt));
+        }
+
+        board.update_board_state();
+
+        assert!(!board.is_in_check());
+    }
+
+    #[test]
+    fn black_is_in_check_by_queen() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+        let pieces = [
+            (PieceType::King, Color::Black, Coordinate::E4),
+            (PieceType::Queen, Color::White, Coordinate::E8),
+        ];
+
+        for (pt, color, coord) in pieces {
+            board.place_piece(coord, Piece::new(color, pt));
+        }
+
+        board.update_board_state();
+
+        assert!(board.is_in_check());
+    }
+
+    #[test]
+    fn black_is_not_in_check_by_queen_with_blocking_piece() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::Black);
+        let pieces = [
+            (PieceType::King, Color::Black, Coordinate::E4),
+            (PieceType::Pawn, Color::Black, Coordinate::E5),
+            (PieceType::Queen, Color::White, Coordinate::E8),
+        ];
+
+        for (pt, color, coord) in pieces {
+            board.place_piece(coord, Piece::new(color, pt));
+        }
+
+        board.update_board_state();
+
+        assert!(!board.is_in_check());
     }
 }

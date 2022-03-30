@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 use std::slice::Iter;
 
+use crate::bitboard::{get_piece_attacks_bb, lsb};
 use crate::board::{Board, Color, Coordinate, PieceType};
 
 lazy_static! {
     pub static ref ADJACENCY_TABLE: AdjacencyTable = AdjacencyTable::new();
-    pub static ref KNIGHT_MOVES_TABLE: KnightMovesTable = KnightMovesTable::new();
 }
 
 #[repr(u8)]
@@ -46,86 +46,6 @@ impl Direction {
         static DIAG_DIRECTIONS: [Direction; 4] =
             [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
         DIAG_DIRECTIONS.iter()
-    }
-}
-
-pub struct KnightMovesTable {
-    table: Vec<Vec<Coordinate>>,
-}
-
-impl KnightMovesTable {
-    pub fn new() -> Self {
-        let mut t = KnightMovesTable {
-            table: std::iter::repeat(vec![]).take(64).collect::<Vec<_>>(),
-        };
-
-        for i in 0..64 {
-            let coord = Coordinate::try_from(i as usize).unwrap();
-            let rank = coord.get_rank();
-            let file = coord.get_file();
-
-            if rank < 7 && file < 8 {
-                //   ___>
-                //   |
-                //   |
-                t.set(coord, Coordinate::try_from(i + 17).unwrap());
-            }
-
-            if rank < 8 && file < 7 {
-                //   ____>
-                //   |
-                t.set(coord, Coordinate::try_from(i + 10).unwrap());
-            }
-
-            if rank < 7 && file > 1 {
-                //  <___
-                //     |
-                //     |
-                t.set(coord, Coordinate::try_from(i + 15).unwrap());
-            }
-
-            if rank < 8 && file > 2 {
-                //    <|
-                //     |______
-                t.set(coord, Coordinate::try_from(i + 6).unwrap());
-            }
-
-            if rank > 2 && file < 8 {
-                //     |
-                //     |
-                //  <__|
-                t.set(coord, Coordinate::try_from(i - 15).unwrap());
-            }
-
-            if rank > 1 && file < 7 {
-                //  |
-                //  |____>
-                t.set(coord, Coordinate::try_from(i - 6).unwrap());
-            }
-
-            if rank > 2 && file > 1 {
-                //    |
-                //    |
-                // <__|
-                t.set(coord, Coordinate::try_from(i - 17).unwrap());
-            }
-
-            if rank > 1 && file > 2 {
-                //      |
-                // <____|
-                t.set(coord, Coordinate::try_from(i - 10).unwrap());
-            }
-        }
-
-        t
-    }
-
-    pub fn set(&mut self, src: Coordinate, dest: Coordinate) {
-        self.table[src as usize].push(dest);
-    }
-
-    pub fn get(&self, src: Coordinate) -> &Vec<Coordinate> {
-        &self.table[src as usize]
     }
 }
 
@@ -254,14 +174,15 @@ pub fn square_controlled_by_knight_from(
     color: Color,
     square: Coordinate,
 ) -> Option<Coordinate> {
-    for dest_square in KNIGHT_MOVES_TABLE.get(square) {
-        if let Some(p) = board.get_from_coordinate(*dest_square) {
-            if p.color == color && p.piece_type == PieceType::Knight {
-                return Some(*dest_square);
-            }
-        }
+    let attacking_knight_bb = get_piece_attacks_bb(PieceType::Knight, square)
+        & board.get_color_bb(color)
+        & board.get_piece_type_bb(PieceType::Knight);
+
+    if attacking_knight_bb != 0 {
+        Some(Coordinate::from_bb(lsb(attacking_knight_bb)))
+    } else {
+        None
     }
-    None
 }
 
 fn is_square_controlled_by_bishop_style(board: &Board, color: Color, square: Coordinate) -> bool {

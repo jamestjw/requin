@@ -7,7 +7,10 @@ use crate::board::*;
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
 
-pub use threats::get_sliding_attacks_by_magic;
+pub use threats::{
+    edge_to_edge_bb, get_pawn_attacks_bb, get_piece_attacks_bb, get_sliding_attacks_occupied,
+    path_between, sliding_attack_blockers,
+};
 
 pub type Bitboard = u64;
 
@@ -87,13 +90,20 @@ fn get_file_bb_for_coordinate(coord: Coordinate) -> Bitboard {
 // TODO: Investigate the usage of de Bruijn sequences to do this
 // https://stackoverflow.com/questions/757059/position-of-least-significant-bit-that-is-set
 pub fn lsb(b: Bitboard) -> Bitboard {
-    b & (1 << b.trailing_zeros())
+    b & (1u64.wrapping_shl(b.trailing_zeros()))
 }
 
 // Returns the LSB and the popped version of the Bitboard
 pub fn pop_lsb(b: Bitboard) -> (Bitboard, Bitboard) {
     let lsb = lsb(b);
     (lsb, b & !lsb)
+}
+
+pub fn more_than_one(b: Bitboard) -> bool {
+    // If popping the LSB results in something that is non-zero,
+    // we can immediately tell that there is more than one bit that
+    // is set
+    pop_lsb(b).1 != 0
 }
 
 #[cfg(test)]
@@ -174,5 +184,14 @@ mod bitboard_tests {
     fn test_pop_lsb() {
         let b = 0b1010101100;
         assert_eq!(pop_lsb(b), (0b100, 0b1010101000));
+    }
+
+    #[test]
+    fn test_more_than_one() {
+        assert!(more_than_one(0b11));
+        assert!(more_than_one(0b110));
+        assert!(!more_than_one(0b0));
+        assert!(!more_than_one(0b1));
+        assert!(!more_than_one(0b10));
     }
 }

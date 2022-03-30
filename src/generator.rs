@@ -1,8 +1,6 @@
 use crate::bitboard::*;
 use crate::board::movements::{are_squares_controlled_by_player, is_square_controlled_by_player};
-use crate::board::{
-    Board, Color, Coordinate, Direction, PieceType, ADJACENCY_TABLE, KNIGHT_MOVES_TABLE,
-};
+use crate::board::{Board, Color, Coordinate, Direction, PieceType, ADJACENCY_TABLE};
 use crate::r#move::Move;
 
 use std::convert::TryFrom;
@@ -92,21 +90,26 @@ fn generate_knight_moves(board: &Board, src: Coordinate) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
     let mut res = vec![];
 
-    for dest_square in KNIGHT_MOVES_TABLE.get(src) {
-        match board.get_from_coordinate(*dest_square) {
+    let mut knight_moves_bb = get_piece_attacks_bb(PieceType::Knight, src);
+
+    while knight_moves_bb != 0 {
+        let (dest_bb, popped_bb) = pop_lsb(knight_moves_bb);
+        knight_moves_bb = popped_bb;
+        let dest_square = Coordinate::from_bb(dest_bb);
+        match board.get_from_coordinate(dest_square) {
             Some(occupant) => {
                 // Capture an enemy piece
                 if occupant.color != piece.color {
                     res.push(Move::new_capture(
                         src,
-                        *dest_square,
+                        dest_square,
                         piece,
                         occupant.piece_type,
                     ));
                 }
             }
             None => {
-                res.push(Move::new(src, *dest_square, piece));
+                res.push(Move::new(src, dest_square, piece));
             }
         }
     }
@@ -123,7 +126,7 @@ fn generate_slider_style_moves(board: &Board, src: Coordinate, piece_type: Piece
 
     let occupied = board.get_all_pieces_bb();
     let opposite_color_bb = board.get_color_bb(piece.color.other_color());
-    let mut attacks = get_sliding_attacks_by_magic(piece_type, src, occupied);
+    let mut attacks = get_sliding_attacks_occupied(piece_type, src, occupied);
 
     let mut res = vec![];
 
@@ -290,12 +293,84 @@ fn generate_queen_moves(board: &Board, src: Coordinate) -> Vec<Move> {
 
 // Determines whether a given move is legal
 fn is_move_legal(board: &Board, color: Color, m: &Move) -> bool {
-    let mut board_copy = board.clone();
-    // Hypothetically apply the move
-    board_copy.apply_move(m);
-    let king_coord = board_copy.get_king_coordinate(color);
+    if board.is_in_check() {
+        if m.piece.piece_type != PieceType::King {
+            // If in double check, the king has to move
+            if more_than_one(board.get_checkers()) {
+                return false;
+            }
+            // Interpose the check or capture the checker
+            // Note: Path between returns all squares between the king and
+            // the checker (including the square of the checker), hence this
+            // covers both ways of defending against the check
+            if (path_between(
+                board.get_king_coordinate(color).expect("Missing king"),
+                Coordinate::from_bb(lsb(board.get_checkers())),
+            ) & m.dest.to_bb())
+                == 0
+            {
+                return false;
+            }
+        } else if get_attackers_of_square_bb(
+            board,
+            m.dest,
+            color.other_color(),
+            board.get_all_pieces_bb() ^ m.src.to_bb(),
+        ) != 0
+        {
+            // If it is a king move, we need to check that moving the king would not
+            // expose an attack on the dest square, e.g. when moving along the same
+            // diagonal as a bishop attack
+            return false;
+        }
+    }
 
-    !is_square_controlled_by_player(&board_copy, color.other_color(), king_coord)
+    if m.is_en_passant {
+        // Check if this exposes the king to any attacks
+        let king_coord = board.get_king_coordinate(color).expect("Missing king");
+        // This should exist if an en passant move was generated
+        let captured_square_bb = board
+            .get_en_passant_square()
+            .expect("Missing en passant square")
+            .to_bb();
+        let src_square_bb = m.src.to_bb();
+        let dest_square_bb = m.dest.to_bb();
+        // Calculate the bb by removing the capturing pawn's initial square and its victim, place
+        // the pawn on its new square.
+        let pieces =
+            (board.get_all_pieces_bb() ^ src_square_bb ^ captured_square_bb) | dest_square_bb;
+
+        // Ensure that this exposes no attacks on the king
+        return (board.get_piece_types_bb_for_color(
+            PieceType::Rook,
+            PieceType::Queen,
+            color.other_color(),
+        ) & get_sliding_attacks_occupied(PieceType::Rook, king_coord, pieces)
+            == 0)
+            && (board.get_piece_types_bb_for_color(
+                PieceType::Bishop,
+                PieceType::Queen,
+                color.other_color(),
+            ) & get_sliding_attacks_occupied(PieceType::Bishop, king_coord, pieces)
+                == 0);
+    } else {
+        // If it is a king move, we just have to ensure that the king is not walking into an attacked square
+        if m.piece.piece_type == PieceType::King {
+            return !is_square_controlled_by_player(board, color.other_color(), m.dest);
+        } else {
+            // If it is a non-king move, we check that the piece is not pinned. If it is, then it must not leave
+            // the defense of the king.
+            // To verify that the piece doesn't leave the defense of the king, we find a path between the king and
+            // the piece that stretches from one edge of the board to the other, we then check that the piece's
+            // destination remains in this path.
+            return (board.get_king_shields(color) & m.src.to_bb() == 0)
+                || (edge_to_edge_bb(
+                    board.get_king_coordinate(color).expect("Missing king"),
+                    m.src,
+                ) & m.dest.to_bb()
+                    != 0);
+        }
+    }
 }
 
 // Generate all moves given a certain board
@@ -395,6 +470,26 @@ pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<C
 
     // TODO: Remove duplicates
     res
+}
+
+// Get bitboard that represents all attackers (of a particular color) of a particular square.
+// This includes direct attacks only, i.e. this takes into account obstacles on the board.
+pub fn get_attackers_of_square_bb(
+    board: &Board,
+    target: Coordinate,
+    color: Color,
+    occupied: Bitboard,
+) -> Bitboard {
+    (get_pawn_attacks_bb(color.other_color(), target)
+        & board.get_piece_type_bb_for_color(PieceType::Pawn, color))
+        | (get_piece_attacks_bb(PieceType::King, target)
+            & board.get_piece_type_bb_for_color(PieceType::King, color))
+        | (get_piece_attacks_bb(PieceType::Knight, target)
+            & board.get_piece_type_bb_for_color(PieceType::Knight, color))
+        | (get_sliding_attacks_occupied(PieceType::Rook, target, occupied)
+            & board.get_piece_types_bb_for_color(PieceType::Rook, PieceType::Queen, color))
+        | (get_sliding_attacks_occupied(PieceType::Bishop, target, occupied)
+            & board.get_piece_types_bb_for_color(PieceType::Bishop, PieceType::Queen, color))
 }
 
 #[cfg(test)]
@@ -2181,6 +2276,7 @@ mod test {
 
         board.place_piece(Coordinate::E4, king);
         board.place_piece(Coordinate::E5, queen);
+        board.update_board_state();
 
         // Without the enemy rook, the queen is free to move.
         let initial_dest_squares = generate_legal_moves(&board)
@@ -2192,6 +2288,7 @@ mod test {
         assert!(initial_dest_squares.len() != 0);
 
         board.place_piece(Coordinate::E8, enemy_rook);
+        board.update_board_state();
 
         let final_dest_squares = generate_legal_moves(&board)
             .iter()
@@ -2225,6 +2322,7 @@ mod test {
 
         board.place_piece(Coordinate::E4, king);
         board.place_piece(Coordinate::E5, bishop);
+        board.update_board_state();
 
         // Without the enemy rook, the bishop is free to move.
         let initial_dest_squares = generate_legal_moves(&board)
@@ -2236,6 +2334,7 @@ mod test {
         assert!(initial_dest_squares.len() != 0);
 
         board.place_piece(Coordinate::E8, enemy_rook);
+        board.update_board_state();
 
         let final_dest_squares = generate_legal_moves(&board)
             .iter()
@@ -2276,6 +2375,9 @@ mod test {
         board.place_piece(Coordinate::G1, knight);
         board.place_piece(Coordinate::A8, rook);
         board.place_piece(Coordinate::E8, enemy_rook);
+        board.update_board_state();
+
+        assert!(board.is_in_check());
 
         let moves = generate_legal_moves(&board);
         assert_eq!(moves.len(), 6);
@@ -2295,5 +2397,43 @@ mod test {
             rook,
             PieceType::Rook
         )));
+    }
+
+    #[test]
+    fn get_square_attackers() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Queen, Color::Black, Coordinate::B7),
+            (PieceType::Rook, Color::Black, Coordinate::E8),
+            (PieceType::Pawn, Color::Black, Coordinate::E7),
+            (PieceType::Pawn, Color::White, Coordinate::C6),
+            (PieceType::Knight, Color::Black, Coordinate::F6),
+            (PieceType::Pawn, Color::Black, Coordinate::F5),
+            (PieceType::Queen, Color::Black, Coordinate::A4),
+            (PieceType::King, Color::Black, Coordinate::E5),
+            (PieceType::Pawn, Color::Black, Coordinate::C2),
+            (PieceType::Bishop, Color::Black, Coordinate::B1),
+            (PieceType::Rook, Color::Black, Coordinate::E1),
+            (PieceType::Bishop, Color::Black, Coordinate::G2),
+        ];
+
+        for (pt, color, coord) in pieces {
+            board.place_piece(coord, Piece::new(color, pt));
+        }
+
+        assert_eq!(
+            get_attackers_of_square_bb(
+                &board,
+                Coordinate::E4,
+                Color::Black,
+                board.get_all_pieces_bb()
+            ),
+            Coordinate::A4.to_bb()
+                | Coordinate::E5.to_bb()
+                | Coordinate::G2.to_bb()
+                | Coordinate::E1.to_bb()
+                | Coordinate::F5.to_bb()
+                | Coordinate::F6.to_bb()
+        );
     }
 }
