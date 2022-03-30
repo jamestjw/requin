@@ -1,8 +1,8 @@
-use crate::board::movements::{is_square_controlled_by_player};
-use crate::bitboard::{Bitboard, get_bb_for_coordinate};
+use crate::bitboard::{get_bb_for_coordinate, set_bitboard, unset_bitboard, Bitboard};
+use crate::board::movements::is_square_controlled_by_player;
 use crate::engine::get_raw_piece_value;
-use crate::r#move::{CastlingSide, Move};
 use crate::log_2;
+use crate::r#move::{CastlingSide, Move};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
@@ -262,7 +262,6 @@ pub enum Phase {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Board {
-
     piece_type_bbs: [Bitboard; 6],
     piece_color_bbs: [Bitboard; 2],
     pieces: [Option<Piece>; 64],
@@ -337,10 +336,38 @@ impl Board {
 
     pub fn place_piece(&mut self, coord: Coordinate, piece: Piece) {
         self.pieces[coord as usize] = Some(piece);
+
+        // Set piece color bb
+        match piece.color {
+            Color::White => {
+                self.piece_color_bbs[0] = set_bitboard(self.piece_color_bbs[0], coord as usize);
+            }
+            Color::Black => {
+                self.piece_color_bbs[1] = set_bitboard(self.piece_color_bbs[1], coord as usize);
+            }
+        }
+
+        self.piece_type_bbs[piece.piece_type as usize] = set_bitboard(
+            self.piece_type_bbs[piece.piece_type as usize],
+            coord as usize,
+        );
     }
 
-    pub fn remove_piece(&mut self, coord: Coordinate) {
-        self.pieces[coord as usize] = None;
+    pub fn remove_piece(&mut self, coord: Coordinate) -> Option<Piece> {
+        let piece = self.pieces[coord as usize].take();
+
+        // Unset piece colour
+        self.piece_color_bbs[0] = unset_bitboard(self.piece_color_bbs[0], coord as usize);
+        self.piece_color_bbs[1] = unset_bitboard(self.piece_color_bbs[1], coord as usize);
+        // Set piece type bb
+        if let Some(piece) = piece {
+            self.piece_type_bbs[piece.piece_type as usize] = unset_bitboard(
+                self.piece_type_bbs[piece.piece_type as usize],
+                coord as usize,
+            );
+        }
+
+        piece
     }
 
     pub fn print(&self) {
@@ -451,8 +478,8 @@ impl Board {
         let player_color = self.get_from_coordinate(m.src).unwrap().color;
         // Handle a normal move
         if m.castling_side == CastlingSide::Unknown {
-            let original_piece = self.pieces[m.src as usize].take();
-            let dest_piece = self.pieces[m.dest as usize].replace(original_piece.unwrap());
+            let original_piece = self.remove_piece(m.src).unwrap();
+            let dest_piece = self.remove_piece(m.dest);
 
             // Remove captured piece during en passant capture
             if m.is_capture {
@@ -464,18 +491,20 @@ impl Board {
 
                 if m.is_en_passant {
                     let to_remove_square = m.dest.vertical_offset(1, !player_color.is_white());
-                    self.pieces[to_remove_square as usize] = None;
+                    self.remove_piece(to_remove_square);
                 }
             }
 
             match m.promotes_to {
                 Some(ppt) => {
-                    let mut promoted_piece = original_piece.unwrap();
-                    promoted_piece.piece_type = ppt;
-                    self.pieces[m.dest as usize] = Some(promoted_piece);
+                    let promoted_piece = Piece::new(player_color, ppt);
+                    self.place_piece(m.dest, promoted_piece);
                     self.npm += get_raw_piece_value(ppt, Phase::Midgame);
                 }
-                None => {}
+                None => {
+                    // If it isn't a promotion, put the src piece on the dest square
+                    self.place_piece(m.dest, original_piece);
+                }
             }
 
             // Check if captured piece is a rook to disable castling rights
@@ -540,10 +569,10 @@ impl Board {
                 }
             };
 
-            let king = self.pieces[king_src as usize].take();
-            let rook = self.pieces[rook_src as usize].take();
-            self.pieces[king_dest as usize] = king;
-            self.pieces[rook_dest as usize] = rook;
+            let king = self.remove_piece(king_src);
+            let rook = self.remove_piece(rook_src);
+            self.place_piece(king_dest, king.expect("King not on source square"));
+            self.place_piece(rook_dest, rook.expect("Rook not on source square"));
 
             self.disable_castling(player_color, true);
             self.disable_castling(player_color, false);
@@ -682,7 +711,7 @@ impl Board {
 
     pub fn get_all_pieces_bb(&self) -> Bitboard {
         // TODO: Maybe add a 7th piece type to represent all piece types
-        self.piece_color_bbs[0] | self.piece_color_bbs[1] 
+        self.piece_color_bbs[0] | self.piece_color_bbs[1]
     }
 
     pub fn get_color_bb(&self, color: Color) -> Bitboard {

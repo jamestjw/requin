@@ -77,11 +77,13 @@ pub fn run_uci() {
     uci_client.run();
 }
 
-const fn num_bits<T>() -> usize { std::mem::size_of::<T>() * 8 }
+const fn num_bits<T>() -> usize {
+    std::mem::size_of::<T>() * 8
+}
 
 fn log_2(x: u64) -> usize {
     assert!(x > 0);
-    num_bits::<u64>() as usize - x.leading_zeros()  as usize - 1
+    num_bits::<u64>() as usize - x.leading_zeros() as usize - 1
 }
 
 #[cfg(test)]

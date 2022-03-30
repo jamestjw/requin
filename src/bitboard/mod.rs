@@ -39,15 +39,15 @@ static F_FILE_BB: Bitboard = A_FILE_BB << 5;
 static G_FILE_BB: Bitboard = A_FILE_BB << 6;
 static H_FILE_BB: Bitboard = A_FILE_BB << 7;
 
-fn get_bitboard(bitboard: Bitboard, idx: usize) -> bool {
+pub fn get_bitboard(bitboard: Bitboard, idx: usize) -> bool {
     (bitboard & (1 << idx)) != 0
 }
 
-fn set_bitboard(bitboard: Bitboard, idx: usize) -> Bitboard {
+pub fn set_bitboard(bitboard: Bitboard, idx: usize) -> Bitboard {
     bitboard | (1 << idx)
 }
 
-fn unset_bitboard(bitboard: Bitboard, idx: usize) -> Bitboard {
+pub fn unset_bitboard(bitboard: Bitboard, idx: usize) -> Bitboard {
     bitboard & !(1 << idx)
 }
 

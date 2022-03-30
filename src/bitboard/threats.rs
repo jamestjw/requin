@@ -64,6 +64,7 @@ lazy_static! {
         (magics, table)
     };
     static ref ROOK_MAGICS: ([Magic; 64], [Bitboard; 0x19000]) = {
+        // TODO: 0x19000 might cause a stack overflow
         let mut table = [0; 0x19000];
         let magics = init_magics(PieceType::Rook, &mut table);
         (magics, table)
