@@ -1,3 +1,4 @@
+pub mod bitboard;
 pub mod board;
 pub mod engine;
 pub mod game;
@@ -6,6 +7,7 @@ pub mod r#move;
 pub mod parser;
 pub mod uci;
 
+pub use bitboard::init_tables;
 use board::Board;
 use engine::Searcher;
 use game::Game;
@@ -30,6 +32,8 @@ pub fn play_game_ai(ai_starts: bool, depth: u32, num_threads: usize) {
     let mut game = Game::new(board);
     game.init_game_board();
     let mut searcher = Searcher::new(game, depth, num_threads);
+
+    init_tables();
 
     // 0 implies that it is the AI's turn
     let turn_seq = if ai_starts { [0, 1] } else { [1, 0] };
@@ -58,6 +62,8 @@ pub fn play_game_pvp() {
     let mut game = Game::new(board);
     game.init_game_board();
 
+    init_tables();
+
     loop {
         clear_screen();
         game.print_current_board();
@@ -73,5 +79,29 @@ pub fn play_game_pvp() {
 
 pub fn run_uci() {
     let mut uci_client = Client::new();
+    init_tables();
     uci_client.run();
+}
+
+const fn num_bits<T>() -> usize {
+    std::mem::size_of::<T>() * 8
+}
+
+fn log_2(x: u64) -> usize {
+    assert!(x > 0);
+    num_bits::<u64>() as usize - x.leading_zeros() as usize - 1
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_log_2() {
+        assert_eq!(log_2(1), 0);
+        assert_eq!(log_2(2), 1);
+        assert_eq!(log_2(3), 1);
+        assert_eq!(log_2(4), 2);
+        assert_eq!(log_2(8), 3);
+    }
 }

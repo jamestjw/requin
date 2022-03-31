@@ -19,6 +19,8 @@ threadpool = "1.8.1"
 mockall_double = "0.1.0"
 strum = "0.24"
 strum_macros = "0.24"
+rand = "0.8.5"
 
 [dev-dependencies]
 mockall = "0.8.0"
+ctor = "0.1.22"
