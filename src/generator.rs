@@ -1,6 +1,5 @@
 use crate::bitboard::*;
-use crate::board::movements::{are_squares_controlled_by_player, is_square_controlled_by_player};
-use crate::board::{Board, Color, Coordinate, Direction, PieceType, ADJACENCY_TABLE};
+use crate::board::{Board, Color, Coordinate, PieceType};
 use crate::r#move::Move;
 
 use std::convert::TryFrom;
@@ -161,23 +160,25 @@ fn generate_slider_style_moves(board: &Board, src: Coordinate, piece_type: Piece
 fn generate_king_moves(board: &Board, src: Coordinate, with_castling: bool) -> Vec<Move> {
     let piece = board.get_from_coordinate(src).unwrap();
     let mut res = vec![];
+    let mut king_movement_bb = get_piece_attacks_bb(PieceType::King, src);
 
-    for dir in Direction::iterator() {
-        if let Some(dest_square) = ADJACENCY_TABLE.get(src, *dir) {
-            // Check if square is occupied
-            if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
-                // Add a move for the capture of an opposing color piece
-                if occupying_piece.color != piece.color {
-                    res.push(Move::new_capture(
-                        src,
-                        dest_square,
-                        piece,
-                        occupying_piece.piece_type,
-                    ));
-                }
-            } else {
-                res.push(Move::new(src, dest_square, piece));
+    while king_movement_bb != 0 {
+        let (dest, popped_bb) = pop_lsb(king_movement_bb);
+        king_movement_bb = popped_bb;
+        let dest_square = Coordinate::from_bb(dest);
+        // Check if square is occupied
+        if let Some(occupying_piece) = board.get_from_coordinate(dest_square) {
+            // Add a move for the capture of an opposing color piece
+            if occupying_piece.color != piece.color {
+                res.push(Move::new_capture(
+                    src,
+                    dest_square,
+                    piece,
+                    occupying_piece.piece_type,
+                ));
             }
+        } else {
+            res.push(Move::new(src, dest_square, piece));
         }
     }
 
@@ -419,59 +420,6 @@ pub fn generate_non_quiescent_moves(board: &Board) -> Vec<Move> {
         .collect()
 }
 
-fn generate_pawn_controlled_squares(board: &Board, src: Coordinate) -> Vec<Coordinate> {
-    let mut res = vec![];
-    let piece = board.get_from_coordinate(src).unwrap();
-
-    let directions = match piece.color {
-        Color::White => [Direction::NW, Direction::NE],
-        Color::Black => [Direction::SW, Direction::SE],
-    };
-
-    for direction in &directions {
-        match ADJACENCY_TABLE.get(src, *direction) {
-            Some(dest) => res.push(dest),
-            None => {}
-        }
-    }
-    res
-}
-
-// Generate all the squares controlled by a certain player
-// TODO: There is a bug here, pinned pieces control squares too
-pub fn generate_players_controlled_squares(board: &Board, color: Color) -> Vec<Coordinate> {
-    let mut res = vec![];
-
-    for (i, piece) in board.get_pieces().iter().enumerate() {
-        if let Some(piece) = piece {
-            if color == piece.color {
-                let coord = Coordinate::try_from(i).unwrap();
-
-                if piece.piece_type == PieceType::Pawn {
-                    res.extend(generate_pawn_controlled_squares(board, coord));
-                } else {
-                    let piece_moves = match piece.piece_type {
-                        PieceType::Knight => generate_knight_moves(board, coord),
-                        PieceType::Bishop => generate_bishop_style_moves(board, coord),
-                        PieceType::Rook => generate_rook_style_moves(board, coord),
-                        PieceType::King => generate_king_moves(board, coord, false),
-                        PieceType::Queen => generate_queen_moves(board, coord),
-                        _ => panic!("Unexpected piece type."),
-                    };
-
-                    for piece_move in piece_moves {
-                        let dest_square = piece_move.dest;
-                        res.push(dest_square)
-                    }
-                }
-            }
-        }
-    }
-
-    // TODO: Remove duplicates
-    res
-}
-
 // Get bitboard that represents all attackers (of a particular color) of a particular square.
 // This includes direct attacks only, i.e. this takes into account obstacles on the board.
 pub fn get_attackers_of_square_bb(
@@ -490,6 +438,26 @@ pub fn get_attackers_of_square_bb(
             & board.get_piece_types_bb_for_color(PieceType::Rook, PieceType::Queen, color))
         | (get_sliding_attacks_occupied(PieceType::Bishop, target, occupied)
             & board.get_piece_types_bb_for_color(PieceType::Bishop, PieceType::Queen, color))
+}
+
+pub fn is_square_controlled_by_player(board: &Board, color: Color, square: Coordinate) -> bool {
+    get_attackers_of_square_bb(board, square, color, board.get_all_pieces_bb()) != 0
+}
+
+pub fn are_squares_controlled_by_player(
+    board: &Board,
+    color: Color,
+    squares: &[Coordinate],
+) -> bool {
+    if squares.len() == 0 {
+        return false;
+    }
+
+    squares
+        .iter()
+        .map(|square| is_square_controlled_by_player(board, color, *square))
+        .reduce(|a, b| a || b)
+        .unwrap()
 }
 
 #[cfg(test)]
@@ -2186,38 +2154,6 @@ mod test {
         board.place_piece(Coordinate::E8, king);
 
         generate_castling(&board, Coordinate::E8);
-    }
-
-    #[test]
-    fn generate_pawn_contolled_squares_white() {
-        let mut board = Board::new_empty();
-        let pawn = Piece {
-            color: Color::White,
-            piece_type: PieceType::Pawn,
-        };
-
-        board.place_piece(Coordinate::E4, pawn);
-        let coords = generate_pawn_controlled_squares(&board, Coordinate::E4);
-
-        assert_eq!(coords.len(), 2);
-        assert!(coords.contains(&Coordinate::D5));
-        assert!(coords.contains(&Coordinate::F5));
-    }
-
-    #[test]
-    fn generate_pawn_contolled_squares_black() {
-        let mut board = Board::new_empty();
-        let pawn = Piece {
-            color: Color::Black,
-            piece_type: PieceType::Pawn,
-        };
-
-        board.place_piece(Coordinate::E5, pawn);
-        let coords = generate_pawn_controlled_squares(&board, Coordinate::E5);
-
-        assert_eq!(coords.len(), 2);
-        assert!(coords.contains(&Coordinate::D4));
-        assert!(coords.contains(&Coordinate::F4));
     }
 
     #[test]

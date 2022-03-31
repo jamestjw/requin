@@ -1,5 +1,6 @@
-use crate::board::movements::*;
+use crate::bitboard::lsb;
 use crate::board::{Board, Color, Coordinate, Phase, Piece, PieceType};
+use crate::generator::get_attackers_of_square_bb;
 use crate::r#move::Move;
 
 use lazy_static::lazy_static;
@@ -202,43 +203,26 @@ pub fn evaluate_board(board: &Board) -> i32 {
 // a square. Returns the piece and its source square
 fn get_smallest_attacker(board: &Board, square: Coordinate) -> Option<(Piece, Coordinate)> {
     let color = board.get_player_color();
+    let attacks = get_attackers_of_square_bb(board, square, color, board.get_all_pieces_bb());
 
-    // Here we assume that knights are worth slightly less than bishop
-    if let Some(coord) = square_controlled_by_pawn_from(board, color, square) {
-        return Some((Piece::new(color, PieceType::Pawn), coord));
+    // In ascending order of piece value
+    for pt in [
+        PieceType::Pawn,
+        PieceType::Knight,
+        PieceType::Bishop,
+        PieceType::Rook,
+        PieceType::Queen,
+        PieceType::King,
+    ] {
+        let attacker_square = attacks & board.get_piece_type_bb_for_color(pt, color);
+        if attacker_square != 0 {
+            return Some((
+                Piece::new(color, pt),
+                Coordinate::from_bb(lsb(attacker_square)),
+            ));
+        }
     }
 
-    if let Some(coord) = square_controlled_by_knight_from(board, color, square) {
-        return Some((Piece::new(color, PieceType::Knight), coord));
-    }
-
-    if let Some((_, coord)) =
-        square_controlled_by_bishop_or_queen_from(board, color, square, PieceType::Bishop)
-    {
-        return Some((Piece::new(color, PieceType::Bishop), coord));
-    }
-
-    if let Some((_, coord)) =
-        square_controlled_by_rook_or_queen_from(board, color, square, PieceType::Rook)
-    {
-        return Some((Piece::new(color, PieceType::Rook), coord));
-    }
-
-    if let Some((_, coord)) =
-        square_controlled_by_bishop_or_queen_from(board, color, square, PieceType::Queen)
-    {
-        return Some((Piece::new(color, PieceType::Queen), coord));
-    }
-
-    if let Some((_, coord)) =
-        square_controlled_by_rook_or_queen_from(board, color, square, PieceType::Queen)
-    {
-        return Some((Piece::new(color, PieceType::Queen), coord));
-    }
-
-    if let Some(coord) = square_controlled_by_king_from(board, color, square) {
-        return Some((Piece::new(color, PieceType::King), coord));
-    }
     None
 }
 
@@ -420,6 +404,7 @@ mod test {
         ];
         for (p, coord) in pieces {
             board.place_piece(coord, Piece::new(Color::White, p));
+            board.update_board_state();
             assert_eq!(
                 get_smallest_attacker(&board, Coordinate::E4).unwrap().1,
                 coord
@@ -437,6 +422,7 @@ mod test {
         ];
         for (p, coord, color) in pieces {
             board.place_piece(coord, Piece::new(color, p));
+            board.update_board_state();
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
