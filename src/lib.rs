@@ -7,6 +7,7 @@ pub mod r#move;
 pub mod parser;
 pub mod uci;
 
+pub use bitboard::init_tables;
 use board::Board;
 use engine::Searcher;
 use game::Game;
@@ -31,6 +32,8 @@ pub fn play_game_ai(ai_starts: bool, depth: u32, num_threads: usize) {
     let mut game = Game::new(board);
     game.init_game_board();
     let mut searcher = Searcher::new(game, depth, num_threads);
+
+    init_tables();
 
     // 0 implies that it is the AI's turn
     let turn_seq = if ai_starts { [0, 1] } else { [1, 0] };
@@ -59,6 +62,8 @@ pub fn play_game_pvp() {
     let mut game = Game::new(board);
     game.init_game_board();
 
+    init_tables();
+
     loop {
         clear_screen();
         game.print_current_board();
@@ -74,6 +79,7 @@ pub fn play_game_pvp() {
 
 pub fn run_uci() {
     let mut uci_client = Client::new();
+    init_tables();
     uci_client.run();
 }
 

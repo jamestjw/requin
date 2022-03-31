@@ -9,7 +9,7 @@ use std::convert::TryFrom;
 
 pub use threats::{
     edge_to_edge_bb, get_pawn_attacks_bb, get_piece_attacks_bb, get_sliding_attacks_occupied,
-    path_between, sliding_attack_blockers,
+    init_tables, path_between, sliding_attack_blockers,
 };
 
 pub type Bitboard = u64;

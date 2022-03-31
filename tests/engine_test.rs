@@ -1,8 +1,15 @@
 use requin::board::*;
 use requin::engine::Searcher;
 use requin::game::Game;
+use requin::init_tables;
 use requin::parser::parse_fen;
 use requin::r#move::Move;
+
+#[cfg(test)]
+#[ctor::ctor]
+fn init() {
+    init_tables();
+}
 
 #[test]
 fn test_depth_one_best_move_white() {

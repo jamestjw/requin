@@ -434,6 +434,15 @@ pub fn get_piece_attacks_bb(piece_type: PieceType, src: Coordinate) -> Bitboard 
     PIECE_TYPE_ATTACKS[piece_type as usize][src as usize]
 }
 
+pub fn init_tables() {
+    lazy_static::initialize(&BISHOP_MAGICS);
+    lazy_static::initialize(&ROOK_MAGICS);
+    lazy_static::initialize(&PATH_BETWEEN_SQUARES_BB);
+    lazy_static::initialize(&EDGE_TO_EDGE_BB);
+    lazy_static::initialize(&PAWN_ATTACKS_BB);
+    lazy_static::initialize(&PIECE_TYPE_ATTACKS);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
