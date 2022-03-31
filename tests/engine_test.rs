@@ -37,6 +37,7 @@ fn test_depth_one_best_move_white() {
     board.place_piece(Coordinate::E8, black_king);
     board.place_piece(Coordinate::A1, white_rook);
     board.place_piece(Coordinate::A8, black_rook);
+    board.init();
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
@@ -74,6 +75,7 @@ fn test_depth_one_best_move_black() {
     board.place_piece(Coordinate::E8, black_king);
     board.place_piece(Coordinate::A1, white_rook);
     board.place_piece(Coordinate::A8, black_rook);
+    board.init();
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
@@ -115,6 +117,7 @@ fn test_depth_two_best_move_white() {
     board.place_piece(Coordinate::D4, white_rook);
     board.place_piece(Coordinate::A4, black_bishop_1);
     board.place_piece(Coordinate::H4, black_bishop_2);
+    board.init();
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
@@ -161,6 +164,7 @@ fn test_depth_two_best_move_black() {
     board.place_piece(Coordinate::C2, black_rook);
     board.place_piece(Coordinate::H2, white_bishop_1);
     board.place_piece(Coordinate::A2, white_bishop_2);
+    board.init();
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
@@ -206,6 +210,7 @@ fn test_depth_three_best_move_white() {
     board.place_piece(Coordinate::D2, white_rook);
     board.place_piece(Coordinate::E7, white_pawn);
     board.place_piece(Coordinate::E8, black_rook);
+    board.init();
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 1);
