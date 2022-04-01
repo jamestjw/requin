@@ -135,7 +135,7 @@ fn uci<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W) {
     let mut state = state.lock().unwrap();
     state.is_initialized = true;
 
-    writeln!(output, "id name Requin v1.1.0").unwrap();
+    writeln!(output, "id name Requin v1.2.0").unwrap();
     writeln!(output, "id author James Tan").unwrap();
 
     for uci_option in UCI_OPTIONS.iter() {
@@ -302,7 +302,7 @@ mod test {
         assert_eq!(
             std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
             vec![
-                "id name Requin v1.1.0\n",
+                "id name Requin v1.2.0\n",
                 "id author James Tan\n",
                 "option name NumThreads type spin default 16 min 1 max 32\n",
                 "uciok\n"
