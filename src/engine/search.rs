@@ -163,7 +163,8 @@ impl Searcher {
         let offset = if is_white { -1 } else { 1 };
         let stand_pat = offset * evaluate_board(self.game.current_board());
 
-        if stand_pat >= beta {
+        // Do not return stand-pat if in check
+        if stand_pat >= beta && !self.game.current_board().is_in_check() {
             return beta;
         }
 
@@ -192,7 +193,7 @@ impl Searcher {
 
         for (m, see) in non_quiescent_moves {
             // Prune captures with SEE < 0
-            if see < 0 {
+            if see < 0 && !self.game.current_board().is_in_check() {
                 break;
             }
             self.nodes_searched += 1;
