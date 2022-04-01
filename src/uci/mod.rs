@@ -14,6 +14,7 @@ pub struct UCIState {
     is_initialized: bool,
     position: Option<Board>,
     go_args: Option<GoArgs>,
+    num_threads: usize,
 }
 
 impl UCIState {
@@ -22,6 +23,7 @@ impl UCIState {
             is_initialized: false,
             position: None,
             go_args: None,
+            num_threads: 16,
         }
     }
 

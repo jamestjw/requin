@@ -160,7 +160,7 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
         }
     };
 
-    let mut searcher = Searcher::new(Game::new(pos), depth, 16);
+    let mut searcher = Searcher::new(Game::new(pos), depth, state.num_threads);
 
     match searcher.get_best_move() {
         Ok(best_move) => {
