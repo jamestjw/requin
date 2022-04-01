@@ -58,6 +58,7 @@ impl Client {
             static ref GO: Regex = Regex::new(r"^go((\s+(ponder|infinite|searchmoves(\s+[a-h][1-8][a-h][1-8])+|(wtime|btime|winc|binc|depth|movestogo|nodes|mate|movetime)\s+(\d+)))*)?").unwrap();
             static ref STOP: Regex = Regex::new(r"^stop").unwrap();
             static ref PONDERHIT: Regex = Regex::new(r"^ponderhit").unwrap();
+            static ref SETOPTION: Regex = Regex::new(r"^setoption name (\w+) value (\w+)").unwrap();
             static ref QUIT: Regex = Regex::new(r"^quit").unwrap();
         }
 
@@ -112,6 +113,15 @@ impl Client {
         } else if let Some(_) = PONDERHIT.captures(&cmd) {
             self.handler
                 .handle_ponderhit(Arc::clone(&self.state), Output::new(std::io::stdout()));
+        } else if let Some(m) = SETOPTION.captures(&cmd) {
+            let arg_name = m[1].to_string();
+            let arg_val = m[2].to_string();
+            self.handler.handle_setoption(
+                Arc::clone(&self.state),
+                Output::new(std::io::stdout()),
+                arg_name,
+                arg_val,
+            );
         } else if let Some(_) = QUIT.captures(&cmd) {
             std::process::exit(exitcode::OK);
         } else {
@@ -405,5 +415,23 @@ mod test {
 
         let mut client = Client::new_with_handler(mock_handler);
         client.handle_command("ponderhit");
+    }
+
+    #[test]
+    fn test_handle_setoption() {
+        let mut mock_handler = UCIHandler::default();
+        mock_handler
+            .expect_handle_setoption::<Output<std::io::Stdout>>()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(String::from("NumThreads")),
+                predicate::eq(String::from("32")),
+            )
+            .times(1)
+            .returning(|_, _, _, _| ());
+
+        let mut client = Client::new_with_handler(mock_handler);
+        client.handle_command("setoption name NumThreads value 32");
     }
 }
