@@ -23,4 +23,3 @@ rand = "0.8.5"
 
 [dev-dependencies]
 mockall = "0.8.0"
-ctor = "0.1.22"
