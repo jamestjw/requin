@@ -1,11 +1,24 @@
-use super::{ArcMutexUCIState, GoArgs};
+use super::{ArcMutexUCIState, GoArgs, UCIOption, UCIOptionType};
 use crate::board::{Board, Coordinate};
 use crate::engine::Searcher;
 use crate::game::Game;
 use crate::parser::parse_fen;
 
+use lazy_static::lazy_static;
 use mockall_double::double;
 use std::io::Write;
+
+lazy_static! {
+    static ref UCI_OPTIONS: [UCIOption; 1] = {
+        [UCIOption::new(
+            "NumThreads".into(),
+            UCIOptionType::Spin,
+            16,
+            1,
+            32,
+        )]
+    };
+}
 
 #[allow(dead_code)]
 mod mockable {
@@ -102,6 +115,16 @@ mod mockable {
                 ponderhit(state, output);
             });
         }
+
+        pub fn handle_setoption<W: Write + Send + 'static>(
+            &mut self,
+            state: ArcMutexUCIState,
+            output: W,
+            arg_name: String,
+            args_val: String,
+        ) {
+            set_option(state, output, arg_name, args_val);
+        }
     }
 }
 
@@ -114,8 +137,25 @@ fn uci<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W) {
 
     writeln!(output, "id name Requin v1.1.0").unwrap();
     writeln!(output, "id author James Tan").unwrap();
+
+    for uci_option in UCI_OPTIONS.iter() {
+        writeln!(output, "{}", format_uci_option(uci_option)).unwrap();
+    }
+
     writeln!(output, "uciok").unwrap();
     output.flush().unwrap();
+}
+
+fn format_uci_option(uci_option: &UCIOption) -> String {
+    // TODO: Handle other types
+    let type_string = match uci_option.option_type {
+        UCIOptionType::Spin => "spin",
+        // _ => panic!("Unexpected UCIOptionType"),
+    };
+    format!(
+        "option name {} type {} default {} min {} max {}",
+        uci_option.name, type_string, uci_option.default, uci_option.min, uci_option.max
+    )
 }
 
 fn isready<W: Write + Send + 'static>(mut output: W) {
@@ -205,6 +245,45 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
     state.position = Some(board);
 }
 
+fn set_option<W: Write + Send + 'static>(
+    state: ArcMutexUCIState,
+    mut output: W,
+    arg_name: String,
+    args_val: String,
+) {
+    // Search for the option
+    for uci_option in UCI_OPTIONS.iter() {
+        if arg_name == uci_option.name {
+            match args_val.parse::<u32>() {
+                Ok(val) => {
+                    if val > uci_option.max || val < uci_option.min {
+                        writeln!(output, "Option not in range for {}", arg_name).unwrap();
+                        output.flush().unwrap();
+                        return;
+                    }
+                    let mut state = state.lock().unwrap();
+
+                    // TODO: Figure out a better of doing this, this looks like a code smell
+                    // Consider using a HashMap when more options come into play
+                    if arg_name == "NumThreads" {
+                        state.num_threads = val as usize;
+                    } else {
+                        writeln!(output, "Unexpected option {}", arg_name).unwrap();
+                        output.flush().unwrap();
+                    }
+                }
+                Err(_) => {
+                    writeln!(output, "Expected an integer option for {}", arg_name).unwrap();
+                    output.flush().unwrap();
+                }
+            }
+            return;
+        }
+    }
+    writeln!(output, "{} is an invalid option", arg_name).unwrap();
+    output.flush().unwrap();
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -222,7 +301,13 @@ mod test {
 
         assert_eq!(
             std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
-            "id name Requin v1.1.0\nid author James Tan\nuciok\n"
+            vec![
+                "id name Requin v1.1.0\n",
+                "id author James Tan\n",
+                "option name NumThreads type spin default 16 min 1 max 32\n",
+                "uciok\n"
+            ]
+            .join("")
         );
     }
 
@@ -302,5 +387,70 @@ mod test {
         let board = state.lock().unwrap().position.unwrap();
 
         assert_eq!(expected_board, board);
+    }
+
+    #[test]
+    fn handle_set_option_invalid_option_name() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        set_option(
+            state,
+            output_buffer.clone(),
+            "InvalidOptionName".into(),
+            "Some random arg".into(),
+        );
+
+        assert_eq!(
+            std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
+            "InvalidOptionName is an invalid option\n"
+        );
+    }
+
+    #[test]
+    fn handle_set_option_num_threads_valid() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        set_option(
+            state.clone(),
+            output_buffer.clone(),
+            "NumThreads".into(),
+            "12".into(),
+        );
+
+        assert_eq!(state.lock().unwrap().num_threads, 12);
+    }
+
+    #[test]
+    fn handle_set_option_num_threads_out_of_range() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        set_option(
+            state.clone(),
+            output_buffer.clone(),
+            "NumThreads".into(),
+            "10000".into(),
+        );
+
+        assert_eq!(
+            std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
+            "Option not in range for NumThreads\n"
+        );
+    }
+
+    #[test]
+    fn handle_set_option_num_threads_not_number() {
+        let output_buffer: Output<Vec<u8>> = Output::new(vec![]);
+        let state = new_arc_mutex_uci_state();
+        set_option(
+            state.clone(),
+            output_buffer.clone(),
+            "NumThreads".into(),
+            "abcd".into(),
+        );
+
+        assert_eq!(
+            std::str::from_utf8(&output_buffer.get_inner().lock().unwrap()).unwrap(),
+            "Expected an integer option for NumThreads\n"
+        );
     }
 }
