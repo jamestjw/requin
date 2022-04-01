@@ -411,12 +411,13 @@ pub fn generate_legal_moves(board: &Board) -> Vec<Move> {
 
 pub fn generate_non_quiescent_moves(board: &Board) -> Vec<Move> {
     // Filter out illegal moves, i.e. moves that endanger the king.
-    // Also filter out moves that aren't captures
+    // Also filter out moves that aren't captures unless we are in check
     let player_color = board.get_player_color();
+    let is_in_check = board.is_in_check();
 
     generate_moves(board)
         .into_iter()
-        .filter(|m| is_move_legal(board, player_color, m) && m.is_capture)
+        .filter(|m| is_move_legal(board, player_color, m) && (is_in_check || m.is_capture))
         .collect()
 }
 
