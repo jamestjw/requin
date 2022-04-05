@@ -6,10 +6,11 @@ use crate::board::*;
 
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
+use std::slice::Iter;
 
 pub use threats::{
-    edge_to_edge_bb, get_pawn_attacks_bb, get_piece_attacks_bb, get_sliding_attacks_occupied,
-    init_tables, path_between, sliding_attack_blockers,
+    edge_to_edge_bb, get_pawn_attacks_bb, get_pawn_attacks_from_bb, get_piece_attacks_bb,
+    get_sliding_attacks_occupied, init_tables, path_between, sliding_attack_blockers,
 };
 
 pub type Bitboard = u64;
@@ -24,23 +25,23 @@ lazy_static! {
     };
 }
 
-static RANK_1_BB: Bitboard = 0b11111111;
-static RANK_2_BB: Bitboard = RANK_1_BB << (8 * 1);
-static RANK_3_BB: Bitboard = RANK_1_BB << (8 * 2);
-static RANK_4_BB: Bitboard = RANK_1_BB << (8 * 3);
-static RANK_5_BB: Bitboard = RANK_1_BB << (8 * 4);
-static RANK_6_BB: Bitboard = RANK_1_BB << (8 * 5);
-static RANK_7_BB: Bitboard = RANK_1_BB << (8 * 6);
-static RANK_8_BB: Bitboard = RANK_1_BB << (8 * 7);
+pub static RANK_1_BB: Bitboard = 0b11111111;
+pub static RANK_2_BB: Bitboard = RANK_1_BB << (8 * 1);
+pub static RANK_3_BB: Bitboard = RANK_1_BB << (8 * 2);
+pub static RANK_4_BB: Bitboard = RANK_1_BB << (8 * 3);
+pub static RANK_5_BB: Bitboard = RANK_1_BB << (8 * 4);
+pub static RANK_6_BB: Bitboard = RANK_1_BB << (8 * 5);
+pub static RANK_7_BB: Bitboard = RANK_1_BB << (8 * 6);
+pub static RANK_8_BB: Bitboard = RANK_1_BB << (8 * 7);
 
-static A_FILE_BB: Bitboard = 0x0101010101010101;
-static B_FILE_BB: Bitboard = A_FILE_BB << 1;
-static C_FILE_BB: Bitboard = A_FILE_BB << 2;
-static D_FILE_BB: Bitboard = A_FILE_BB << 3;
-static E_FILE_BB: Bitboard = A_FILE_BB << 4;
-static F_FILE_BB: Bitboard = A_FILE_BB << 5;
-static G_FILE_BB: Bitboard = A_FILE_BB << 6;
-static H_FILE_BB: Bitboard = A_FILE_BB << 7;
+pub static A_FILE_BB: Bitboard = 0x0101010101010101;
+pub static B_FILE_BB: Bitboard = A_FILE_BB << 1;
+pub static C_FILE_BB: Bitboard = A_FILE_BB << 2;
+pub static D_FILE_BB: Bitboard = A_FILE_BB << 3;
+pub static E_FILE_BB: Bitboard = A_FILE_BB << 4;
+pub static F_FILE_BB: Bitboard = A_FILE_BB << 5;
+pub static G_FILE_BB: Bitboard = A_FILE_BB << 6;
+pub static H_FILE_BB: Bitboard = A_FILE_BB << 7;
 
 pub fn get_bitboard(bitboard: Bitboard, idx: usize) -> bool {
     (bitboard & (1 << idx)) != 0
@@ -104,6 +105,35 @@ pub fn more_than_one(b: Bitboard) -> bool {
     // we can immediately tell that there is more than one bit that
     // is set
     pop_lsb(b).1 != 0
+}
+
+use strum_macros::EnumIter;
+
+#[repr(i8)]
+#[derive(Clone, Copy, EnumIter)]
+pub enum Direction {
+    N = 8,
+    S = -8,
+    E = 1,
+    W = -1,
+    NE = 8 + 1,
+    NW = 8 - 1,
+    SW = -8 - 1,
+    SE = -8 + 1,
+}
+
+impl Direction {
+    pub fn horizontal_vertical_iterator() -> Iter<'static, Direction> {
+        static HV_DIRECTIONS: [Direction; 4] =
+            [Direction::N, Direction::S, Direction::E, Direction::W];
+        HV_DIRECTIONS.iter()
+    }
+
+    pub fn diagonal_iterator() -> Iter<'static, Direction> {
+        static DIAG_DIRECTIONS: [Direction; 4] =
+            [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
+        DIAG_DIRECTIONS.iter()
+    }
 }
 
 #[cfg(test)]
