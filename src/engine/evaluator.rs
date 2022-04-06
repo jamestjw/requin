@@ -12,7 +12,7 @@ static MIDGAME_PHASE_LIMIT: i32 = 15258; // Upper bound of midgame material valu
 static ENDGAME_PHASE_LIMIT: i32 = 3915; // Lower bound of endgame material value
 static MIDGAME_SCALE: i32 = 128;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Score(i32, i32);
 
 impl Score {
@@ -139,6 +139,11 @@ static WHITE_KING_POSITIONAL_VALUE: [[Score; 8]; 8] = [
     [ Score( 88, 47), Score(120,121), Score( 65, 116), Score( 33, 131), Score( 33, 131), Score( 65, 116), Score(120, 121), Score( 88,  47) ],
     [ Score( 59, 11), Score( 89, 59), Score( 45,  73), Score( -1,  78), Score( -1,  78), Score( 45,  73), Score( 89,  59), Score( 59,  11) ],
 ];
+
+// Assume that it's fine to have half open files near the king
+// in the endgame
+static NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY: [Score; 4] =
+    [Score(50, 0), Score(-100, 0), Score(-200, 0), Score(-400, 0)];
 
 lazy_static! {
     static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
@@ -312,6 +317,10 @@ pub fn evaluate_board(board: &Board) -> i32 {
         );
     }
 
+    // Calculate king safety
+    score +=
+        calculate_king_safety(board, Color::White) - calculate_king_safety(board, Color::Black);
+
     let midgame_score = score.get_for_phase(Phase::Midgame);
     let endgame_score = score.get_for_phase(Phase::Endgame);
 
@@ -443,6 +452,41 @@ fn calculate_piece_type_mobility(
     }
 
     score
+}
+
+fn calculate_king_safety(board: &Board, color: Color) -> Score {
+    let mut num_semi_open_king_files = 0;
+
+    if let Some(king_coord) = board.get_king_coordinate(color) {
+        let king_file = king_coord.get_file();
+        let king_file_bb = FILES_BB[king_file - 1];
+        let our_pawns = board.get_piece_type_bb_for_color(PieceType::Pawn, color);
+
+        // Check for semi open files, i.e. files where we dont have pawns
+        // This should also incentivise the engine to not double its pawns near its
+        // king.
+        // TODO: Implement a bigger penalty for fully opened files?
+        if king_file_bb & our_pawns == 0 {
+            num_semi_open_king_files += 1;
+        }
+
+        // Check if there is a file on the left
+        if king_file > 1 {
+            let left_file_bb = FILES_BB[king_file - 2];
+            if left_file_bb & our_pawns == 0 {
+                num_semi_open_king_files += 1;
+            }
+        }
+
+        // Check if there is a file on the right
+        if king_file < 8 {
+            let right_file_bb = FILES_BB[king_file];
+            if right_file_bb & our_pawns == 0 {
+                num_semi_open_king_files += 1;
+            }
+        }
+    }
+    NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[num_semi_open_king_files as usize]
 }
 
 #[cfg(test)]
@@ -916,6 +960,92 @@ mod test {
         assert_eq!(
             calculate_mobility_area(&board),
             [white_mobility, black_mobility]
+        );
+    }
+}
+
+#[cfg(test)]
+mod king_safety {
+    use super::*;
+
+    #[test]
+    fn no_half_open_files_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::G2, Color::White),
+            (PieceType::Pawn, Coordinate::H2, Color::White),
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::G7, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_safety(&board, Color::White),
+            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[0]
+        );
+    }
+
+    #[test]
+    fn one_half_open_file_white_missing_white_g_pawn() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::H2, Color::White),
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::G7, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_safety(&board, Color::White),
+            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[1]
+        );
+    }
+
+    #[test]
+    fn two_half_open_files_white_missing_white_gh_pawn() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::G7, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::H1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_safety(&board, Color::White),
+            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[2]
+        );
+    }
+
+    #[test]
+    fn three_half_open_files_white_missing_white_pawns() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::G7, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_safety(&board, Color::White),
+            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[3]
         );
     }
 }

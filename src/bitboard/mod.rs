@@ -33,6 +33,9 @@ pub static RANK_5_BB: Bitboard = RANK_1_BB << (8 * 4);
 pub static RANK_6_BB: Bitboard = RANK_1_BB << (8 * 5);
 pub static RANK_7_BB: Bitboard = RANK_1_BB << (8 * 6);
 pub static RANK_8_BB: Bitboard = RANK_1_BB << (8 * 7);
+pub static RANKS_BB: [Bitboard; 8] = [
+    RANK_1_BB, RANK_2_BB, RANK_3_BB, RANK_4_BB, RANK_5_BB, RANK_6_BB, RANK_7_BB, RANK_8_BB,
+];
 
 pub static A_FILE_BB: Bitboard = 0x0101010101010101;
 pub static B_FILE_BB: Bitboard = A_FILE_BB << 1;
@@ -42,6 +45,9 @@ pub static E_FILE_BB: Bitboard = A_FILE_BB << 4;
 pub static F_FILE_BB: Bitboard = A_FILE_BB << 5;
 pub static G_FILE_BB: Bitboard = A_FILE_BB << 6;
 pub static H_FILE_BB: Bitboard = A_FILE_BB << 7;
+pub static FILES_BB: [Bitboard; 8] = [
+    A_FILE_BB, B_FILE_BB, C_FILE_BB, D_FILE_BB, E_FILE_BB, F_FILE_BB, G_FILE_BB, H_FILE_BB,
+];
 
 pub fn get_bitboard(bitboard: Bitboard, idx: usize) -> bool {
     (bitboard & (1 << idx)) != 0
