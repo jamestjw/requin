@@ -4,36 +4,7 @@ use crate::board::*;
 use lazy_static::lazy_static;
 use rand::Rng;
 use std::boxed::Box;
-use std::slice::Iter;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
-
-#[repr(i8)]
-#[derive(Clone, Copy, EnumIter)]
-pub enum Direction {
-    N = 8,
-    S = -8,
-    E = 1,
-    W = -1,
-    NE = 8 + 1,
-    NW = 8 - 1,
-    SW = -8 - 1,
-    SE = -8 + 1,
-}
-
-impl Direction {
-    pub fn horizontal_vertical_iterator() -> Iter<'static, Direction> {
-        static HV_DIRECTIONS: [Direction; 4] =
-            [Direction::N, Direction::S, Direction::E, Direction::W];
-        HV_DIRECTIONS.iter()
-    }
-
-    pub fn diagonal_iterator() -> Iter<'static, Direction> {
-        static DIAG_DIRECTIONS: [Direction; 4] =
-            [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
-        DIAG_DIRECTIONS.iter()
-    }
-}
 
 #[derive(Copy, Clone, Debug)]
 struct Magic {
@@ -352,6 +323,10 @@ pub fn get_sliding_attacks_occupied(
             let index = m.index(occupied);
             ROOK_MAGICS.1[m.attacks_offset + index]
         }
+        PieceType::Queen => {
+            get_sliding_attacks_occupied(PieceType::Bishop, square, occupied)
+                | get_sliding_attacks_occupied(PieceType::Rook, square, occupied)
+        }
         _ => panic!("Invalid piece type"),
     }
 }
@@ -432,6 +407,17 @@ pub fn get_pawn_attacks_bb(color: Color, src: Coordinate) -> Bitboard {
 // Currently only implemented for knights and kings
 pub fn get_piece_attacks_bb(piece_type: PieceType, src: Coordinate) -> Bitboard {
     PIECE_TYPE_ATTACKS[piece_type as usize][src as usize]
+}
+
+pub fn get_pawn_attacks_from_bb(mut pawns: Bitboard, color: Color) -> Bitboard {
+    let mut attacks = 0;
+    while pawns != 0 {
+        let (pawn, popped_pawns) = pop_lsb(pawns);
+        pawns = popped_pawns;
+        attacks |= get_pawn_attacks_bb(color, Coordinate::from_bb(pawn));
+    }
+
+    attacks
 }
 
 pub fn init_tables() {

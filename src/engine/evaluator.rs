@@ -1,10 +1,11 @@
-use crate::bitboard::lsb;
+use crate::bitboard::*;
 use crate::board::{Board, Color, Coordinate, Phase, Piece, PieceType};
 use crate::generator::get_attackers_of_square_bb;
 use crate::r#move::Move;
 
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
+use std::ops::{Add, AddAssign, Neg, Sub};
 use strum::IntoEnumIterator;
 
 static MIDGAME_PHASE_LIMIT: i32 = 15258; // Upper bound of midgame material value
@@ -12,7 +13,7 @@ static ENDGAME_PHASE_LIMIT: i32 = 3915; // Lower bound of endgame material value
 static MIDGAME_SCALE: i32 = 128;
 
 #[derive(Debug, Clone, Copy)]
-struct Score(i32, i32);
+pub struct Score(i32, i32);
 
 impl Score {
     pub fn get_for_phase(&self, p: Phase) -> i32 {
@@ -21,6 +22,36 @@ impl Score {
         } else {
             self.1
         }
+    }
+}
+
+impl Add for Score {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Score(self.0 + other.0, self.1 + other.1)
+    }
+}
+
+impl Sub for Score {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Score(self.0 - other.0, self.1 - other.1)
+    }
+}
+
+impl Neg for Score {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Score(-self.0, -self.1)
+    }
+}
+
+impl AddAssign for Score {
+    fn add_assign(&mut self, other: Self) {
+        *self = Score(self.0 + other.0, self.1 + other.1);
     }
 }
 
@@ -129,44 +160,75 @@ lazy_static! {
         }
         vals
     };
+    static ref MOBILITY_BONUS: [[Score; 28]; 6] = {
+        let mut table = [[Score(0, 0); 28]; 6];
+
+        // Knight mobility
+        let knight_scores = [
+            Score(-62,-79), Score(-53,-57), Score(-12,-31), Score( -3,-17), Score(  3,  7), Score( 12, 13),
+            Score( 21, 16), Score( 28, 21), Score( 37, 26)
+        ];
+
+        let bishop_scores = [ Score(-47,-59), Score(-20,-25), Score( 14, -8), Score( 29, 12), Score( 39, 21), Score( 53, 40),
+            Score( 53, 56), Score( 60, 58), Score( 62, 65), Score( 69, 72), Score( 78, 78), Score( 83, 87),
+            Score( 91, 88), Score( 96, 98)
+        ];
+
+        let rook_scores = [ Score(-60,-82), Score(-24,-15), Score(  0, 17) ,Score(  3, 43), Score(  4, 72), Score( 14,100),
+            Score( 20,102), Score( 30,122), Score( 41,133), Score(41 ,139), Score( 41,153), Score( 45,160),
+            Score( 57,165), Score( 58,170), Score( 67,175)
+        ];
+        let queen_scores = [ Score(-29,-49), Score(-16,-29), Score( -8, -8), Score( -8, 17), Score( 18, 39), Score( 25, 54),
+            Score( 23, 59), Score( 37, 73), Score( 41, 76), Score( 54, 95), Score( 65, 95) ,Score( 68,101),
+            Score( 69,124), Score( 70,128), Score( 70,132), Score( 70,133) ,Score( 71,136), Score( 72,140),
+            Score( 74,147), Score( 76,149), Score( 90,153), Score(104,169), Score(105,171), Score(106,171),
+            Score(112,178), Score(114,185), Score(114,187), Score(119,221)
+        ];
+
+
+        table[PieceType::Knight as usize] = [knight_scores[knight_scores.len() - 1]; 28];
+        for (i, score) in knight_scores.iter().enumerate() {
+            table[PieceType::Knight as usize][i] = *score;
+        }
+
+        table[PieceType::Bishop as usize] = [bishop_scores[bishop_scores.len() - 1]; 28];
+        for (i, score) in bishop_scores.iter().enumerate() {
+            table[PieceType::Bishop as usize][i] = *score;
+        }
+
+        table[PieceType::Rook as usize] = [rook_scores[rook_scores.len() - 1]; 28];
+        for (i, score) in rook_scores.iter().enumerate() {
+            table[PieceType::Rook as usize][i] = *score;
+        }
+
+        table[PieceType::Queen as usize] = [queen_scores[queen_scores.len() - 1]; 28];
+        for (i, score) in queen_scores.iter().enumerate() {
+            table[PieceType::Queen as usize][i] = *score;
+        }
+
+        table
+    };
 }
 
-pub fn get_raw_piece_value(pt: PieceType, phase: Phase) -> i32 {
-    if phase == Phase::Midgame {
-        match pt {
-            PieceType::Pawn => 126,
-            PieceType::Knight => 781,
-            PieceType::Bishop => 825,
-            PieceType::Rook => 1276,
-            PieceType::Queen => 2538,
-            PieceType::King => 0,
-        }
-    } else {
-        match pt {
-            PieceType::Pawn => 208,
-            PieceType::Knight => 854,
-            PieceType::Bishop => 915,
-            PieceType::Rook => 1380,
-            PieceType::Queen => 2682,
-            PieceType::King => 0,
-        }
+pub fn get_raw_piece_value(pt: PieceType) -> Score {
+    match pt {
+        PieceType::Pawn => Score(126, 208),
+        PieceType::Knight => Score(781, 854),
+        PieceType::Bishop => Score(825, 915),
+        PieceType::Rook => Score(1276, 1380),
+        PieceType::Queen => Score(2538, 2682),
+        PieceType::King => Score(0, 0),
     }
 }
 
-fn get_piece_positional_value(
-    color: Color,
-    piece_type: PieceType,
-    coord: Coordinate,
-    phase: Phase,
-) -> i32 {
+fn get_piece_positional_value(color: Color, piece_type: PieceType, coord: Coordinate) -> Score {
     PIECE_POSITIONAL_VALUES[color as usize][piece_type as usize][coord.get_rank() - 1]
         [coord.get_file() - 1]
-        .get_for_phase(phase)
 }
 
-fn get_piece_value(color: Color, piece_type: PieceType, coord: Coordinate, phase: Phase) -> i32 {
-    let val = get_raw_piece_value(piece_type, phase) as i32
-        + get_piece_positional_value(color, piece_type, coord, phase);
+fn get_piece_value(color: Color, piece_type: PieceType, coord: Coordinate) -> Score {
+    let val =
+        get_raw_piece_value(piece_type) + get_piece_positional_value(color, piece_type, coord);
 
     if color == Color::White {
         val
@@ -183,19 +245,76 @@ fn calculate_phase(board: &Board) -> i32 {
         / (MIDGAME_PHASE_LIMIT - ENDGAME_PHASE_LIMIT);
 }
 
+fn calculate_mobility_area(board: &Board) -> [Bitboard; 2] {
+    let mut area = [0; 2];
+
+    for color in [Color::White, Color::Black] {
+        let low_ranks = if color.is_white() {
+            RANK_2_BB | RANK_3_BB
+        } else {
+            RANK_6_BB | RANK_7_BB
+        };
+        // Get pawns that are either obstructed by another piece or are
+        // on the lower ranks
+        let shifted_pieces = if color.is_white() {
+            board.get_all_pieces_bb().wrapping_shr(8)
+        } else {
+            board.get_all_pieces_bb().wrapping_shl(8)
+        };
+        let b = board.get_piece_type_bb_for_color(PieceType::Pawn, color)
+            & (low_ranks | shifted_pieces);
+
+        // Squares that are not occupied by blocked pawns, pinned pieces and kings/queens
+        // are considered to make up the mobility area
+        // These squares should also not be attacked by an enemy pawn.
+        area[color as usize] = !(b
+            | board.get_piece_types_bb_for_color(PieceType::King, PieceType::Queen, color)
+            | board.get_king_shields(color)
+            | get_pawn_attacks_from_bb(
+                board.get_piece_type_bb_for_color(PieceType::Pawn, color.other_color()),
+                color.other_color(),
+            ));
+    }
+
+    area
+}
+
 pub fn evaluate_board(board: &Board) -> i32 {
-    let mut midgame_score = 0;
-    let mut endgame_score = 0;
+    let mut score = Score(0, 0);
 
     let phase = calculate_phase(board);
 
     for (i, piece) in board.get_pieces().iter().enumerate() {
         if let Some(piece) = piece {
             let coord = Coordinate::try_from(i).unwrap();
-            midgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Midgame);
-            endgame_score += get_piece_value(piece.color, piece.piece_type, coord, Phase::Endgame);
+            score += get_piece_value(piece.color, piece.piece_type, coord);
         }
     }
+
+    // Calculate piece mobility bonuses
+    let mobility_area = calculate_mobility_area(board);
+    for pt in [
+        PieceType::Knight,
+        PieceType::Bishop,
+        PieceType::Rook,
+        PieceType::Queen,
+    ] {
+        score += calculate_piece_type_mobility(
+            board,
+            pt,
+            Color::White,
+            mobility_area[Color::White as usize],
+        ) - calculate_piece_type_mobility(
+            board,
+            pt,
+            Color::Black,
+            mobility_area[Color::Black as usize],
+        );
+    }
+
+    let midgame_score = score.get_for_phase(Phase::Midgame);
+    let endgame_score = score.get_for_phase(Phase::Endgame);
+
     (midgame_score * phase + (endgame_score * (MIDGAME_SCALE - phase))) / MIDGAME_SCALE
 }
 
@@ -236,8 +355,7 @@ fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
             .piece_type;
         let attacking_move = Move::new_capture(src, square, piece, victim_piece_type);
         board.apply_move(&attacking_move);
-
-        return get_raw_piece_value(victim_piece_type, Phase::Midgame)
+        return get_raw_piece_value(victim_piece_type).get_for_phase(Phase::Midgame)
             - static_exchange_evaluation(board, square);
     } else {
         return 0;
@@ -248,7 +366,7 @@ pub fn static_exchange_evaluation_capture(mut board: Board, m: &Move) -> i32 {
     // TODO: Deal with en passant
     if let Some(victim_piece) = board.get_from_coordinate(m.dest) {
         board.apply_move(m);
-        return get_raw_piece_value(victim_piece.piece_type, Phase::Midgame)
+        return get_raw_piece_value(victim_piece.piece_type).get_for_phase(Phase::Midgame)
             - static_exchange_evaluation(board, m.dest);
     } else {
         return 0;
@@ -260,11 +378,71 @@ pub fn non_pawn_material(board: &Board) -> i32 {
     for piece in board.get_pieces() {
         if let Some(piece) = piece {
             if piece.piece_type != PieceType::Pawn {
-                val += get_raw_piece_value(piece.piece_type, Phase::Midgame);
+                val += get_raw_piece_value(piece.piece_type).get_for_phase(Phase::Midgame);
             }
         }
     }
     val
+}
+
+fn get_piece_mobility_score(num: usize, pt: PieceType) -> Score {
+    MOBILITY_BONUS[pt as usize][num]
+}
+
+// Supported piece types: Knight, Bishop, Rook, Queen.
+fn calculate_piece_type_mobility(
+    board: &Board,
+    piece_type: PieceType,
+    color: Color,
+    mobility_area: Bitboard,
+) -> Score {
+    let mut score = Score(0, 0);
+    let mut squares_with_pieces = board.get_piece_type_bb_for_color(piece_type, color);
+    while squares_with_pieces != 0 {
+        let (curr_sq, popped_pieces) = pop_lsb(squares_with_pieces);
+        squares_with_pieces = popped_pieces;
+
+        let mut attacked_squares = match piece_type {
+            // Take into account batteries and x-rays
+            PieceType::Bishop => get_sliding_attacks_occupied(
+                PieceType::Bishop,
+                Coordinate::from_bb(curr_sq),
+                board.get_all_pieces_bb() ^ board.get_piece_type_bb(PieceType::Queen),
+            ),
+            // Take into account stacked rooks and queens
+            PieceType::Rook => get_sliding_attacks_occupied(
+                PieceType::Rook,
+                Coordinate::from_bb(curr_sq),
+                board.get_all_pieces_bb()
+                    ^ board.get_piece_type_bb(PieceType::Queen)
+                    ^ board.get_piece_type_bb_for_color(PieceType::Queen, color),
+            ),
+            PieceType::Queen => get_sliding_attacks_occupied(
+                PieceType::Queen,
+                Coordinate::from_bb(curr_sq),
+                board.get_all_pieces_bb(),
+            ),
+            PieceType::Knight => {
+                get_piece_attacks_bb(PieceType::Knight, Coordinate::from_bb(curr_sq))
+            }
+            _ => panic!("Unexpected piece type: {:?}", piece_type),
+        };
+
+        // Pinned pieces may only move without leaving the defense of the king
+        if board.get_king_shields(color) & curr_sq != 0 {
+            attacked_squares &= edge_to_edge_bb(
+                board.get_king_coordinate(color).expect("Missing king"),
+                Coordinate::from_bb(curr_sq),
+            );
+        }
+
+        score += get_piece_mobility_score(
+            (mobility_area & attacked_squares).count_ones() as usize,
+            piece_type,
+        );
+    }
+
+    score
 }
 
 #[cfg(test)]
@@ -285,7 +463,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::Pawn, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::Pawn, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -306,7 +484,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::Knight, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::Knight, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -327,7 +505,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::Bishop, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::Bishop, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -348,7 +526,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::Rook, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::Rook, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -366,7 +544,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::Queen, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::Queen, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -385,7 +563,7 @@ mod test {
 
         for (color, coord, eval, phase) in test_cases.iter() {
             assert_eq!(
-                get_piece_positional_value(*color, PieceType::King, *coord, *phase),
+                get_piece_positional_value(*color, PieceType::King, *coord).get_for_phase(*phase),
                 *eval
             );
         }
@@ -426,7 +604,7 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Pawn, Phase::Midgame)
+            get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame)
         );
     }
 
@@ -444,8 +622,8 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Pawn, Phase::Midgame)
-                - get_raw_piece_value(PieceType::Knight, Phase::Midgame)
+            get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame)
+                - get_raw_piece_value(PieceType::Knight).get_for_phase(Phase::Midgame)
         );
     }
 
@@ -464,7 +642,7 @@ mod test {
         }
         assert_eq!(
             static_exchange_evaluation(board, Coordinate::D5),
-            get_raw_piece_value(PieceType::Knight, Phase::Midgame)
+            get_raw_piece_value(PieceType::Knight).get_for_phase(Phase::Midgame)
         );
     }
 
@@ -497,10 +675,247 @@ mod test {
 
         assert_eq!(
             non_pawn_material(&board),
-            get_raw_piece_value(PieceType::Queen, Phase::Midgame)
-                + get_raw_piece_value(PieceType::Rook, Phase::Midgame)
-                + get_raw_piece_value(PieceType::Bishop, Phase::Midgame)
-                + get_raw_piece_value(PieceType::Knight, Phase::Midgame)
+            get_raw_piece_value(PieceType::Queen).get_for_phase(Phase::Midgame)
+                + get_raw_piece_value(PieceType::Rook).get_for_phase(Phase::Midgame)
+                + get_raw_piece_value(PieceType::Bishop).get_for_phase(Phase::Midgame)
+                + get_raw_piece_value(PieceType::Knight).get_for_phase(Phase::Midgame)
         )
+    }
+
+    #[test]
+    fn evaluate_piece_mobility_for_bishop() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Bishop, Coordinate::A1),
+            (PieceType::Queen, Coordinate::B2),
+        ];
+        for (p, coord) in pieces {
+            board.place_piece(coord, Piece::new(Color::White, p));
+        }
+
+        // println!(
+        //     "{}",
+        //     board.get_all_pieces_bb() ^ board.get_piece_type_bb(PieceType::Queen)
+        // );
+    }
+
+    #[test]
+    fn mobility_area_empty_board() {
+        let mut board = Board::new_empty();
+        let pieces = [];
+        for (p, coord) in pieces {
+            board.place_piece(coord, Piece::new(Color::White, p));
+        }
+        board.init();
+        // Full mobility on an empty board
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [0xffffffffffffffff, 0xffffffffffffffff]
+        );
+    }
+
+    #[test]
+    fn mobility_area_king_queen() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Coordinate::C2),
+            (PieceType::Queen, Coordinate::H5),
+        ];
+        for (p, coord) in pieces {
+            board.place_piece(coord, Piece::new(Color::White, p));
+        }
+        board.init();
+
+        // White mobility area does not include where the king and queen area
+        let white_mobility = 0xffffffffffffffff ^ Coordinate::C2.to_bb() ^ Coordinate::H5.to_bb();
+        let black_mobility = 0xffffffffffffffff;
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_pinned_pieces() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::King, Coordinate::C2, Color::White),
+            (PieceType::Bishop, Coordinate::C3, Color::White),
+            (PieceType::Queen, Coordinate::C8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // White mobility area does not include where the king and its defender are
+        let white_mobility = 0xffffffffffffffff ^ Coordinate::C2.to_bb() ^ Coordinate::C3.to_bb();
+        let black_mobility = 0xffffffffffffffff ^ Coordinate::C8.to_bb();
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_squares_controlled_enemy_pawns_for_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::D4, Color::Black),
+            (PieceType::Pawn, Coordinate::C3, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // White mobility area does not include squares that are controlled by enemy pawns
+        let white_mobility = 0xffffffffffffffff
+            ^ Coordinate::B2.to_bb()
+            ^ Coordinate::D2.to_bb()
+            ^ Coordinate::C3.to_bb()
+            ^ Coordinate::E3.to_bb();
+        let black_mobility = 0xffffffffffffffff;
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_squares_controlled_enemy_pawns_for_black() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::D6, Color::White),
+            (PieceType::Pawn, Coordinate::C7, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // Mobility area does not include squares that are controlled by enemy pawns
+        let white_mobility = 0xffffffffffffffff;
+        let black_mobility = 0xffffffffffffffff
+            ^ Coordinate::B8.to_bb()
+            ^ Coordinate::D8.to_bb()
+            ^ Coordinate::C7.to_bb()
+            ^ Coordinate::E7.to_bb();
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_blocked_pawns_for_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::E4, Color::White),
+            (PieceType::Pawn, Coordinate::E5, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // Mobility area does not include pawns that are obstructed
+        let white_mobility = 0xffffffffffffffff ^ Coordinate::E4.to_bb();
+        let black_mobility = 0xffffffffffffffff
+            ^ Coordinate::D5.to_bb()
+            ^ Coordinate::F5.to_bb()
+            ^ Coordinate::D6.to_bb()
+            ^ Coordinate::F6.to_bb();
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_blocked_pawns_for_black() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::E4, Color::Black),
+            (PieceType::Pawn, Coordinate::E5, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // Mobility area does not include pawns that are obstructed
+        let white_mobility = 0xffffffffffffffff
+            ^ Coordinate::D3.to_bb()
+            ^ Coordinate::F3.to_bb()
+            ^ Coordinate::D4.to_bb()
+            ^ Coordinate::F4.to_bb();
+        let black_mobility = 0xffffffffffffffff ^ Coordinate::E5.to_bb();
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_paws_on_low_ranks_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::D2, Color::White),
+            (PieceType::Pawn, Coordinate::E3, Color::White),
+            (PieceType::Pawn, Coordinate::F4, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // Mobility area does not include pawns that are on low ranks
+        let white_mobility = 0xffffffffffffffff ^ Coordinate::D2.to_bb() ^ Coordinate::E3.to_bb();
+        let black_mobility = 0xffffffffffffffff
+            ^ Coordinate::C3.to_bb()
+            ^ Coordinate::E3.to_bb()
+            ^ Coordinate::D4.to_bb()
+            ^ Coordinate::F4.to_bb()
+            ^ Coordinate::E5.to_bb()
+            ^ Coordinate::G5.to_bb();
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
+    }
+
+    #[test]
+    fn mobility_area_with_paws_on_low_ranks_black() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::D7, Color::Black),
+            (PieceType::Pawn, Coordinate::E6, Color::Black),
+            (PieceType::Pawn, Coordinate::F5, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        board.init();
+
+        // Mobility area does not include pawns that are on low ranks
+        let white_mobility = 0xffffffffffffffff
+            ^ Coordinate::C6.to_bb()
+            ^ Coordinate::E6.to_bb()
+            ^ Coordinate::D5.to_bb()
+            ^ Coordinate::F5.to_bb()
+            ^ Coordinate::E4.to_bb()
+            ^ Coordinate::G4.to_bb();
+        let black_mobility = 0xffffffffffffffff ^ Coordinate::D7.to_bb() ^ Coordinate::E6.to_bb();
+
+        assert_eq!(
+            calculate_mobility_area(&board),
+            [white_mobility, black_mobility]
+        );
     }
 }

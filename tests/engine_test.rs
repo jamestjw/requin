@@ -1,7 +1,6 @@
 use requin::board::*;
 use requin::engine::Searcher;
 use requin::game::Game;
-use requin::init_tables;
 use requin::parser::parse_fen;
 use requin::r#move::Move;
 

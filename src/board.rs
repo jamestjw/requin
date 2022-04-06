@@ -492,7 +492,8 @@ impl Board {
                 // Reduce non pawn material
                 let captured_piece_type = m.captured_piece_type.unwrap();
                 if captured_piece_type != PieceType::Pawn {
-                    self.npm -= get_raw_piece_value(m.captured_piece_type.unwrap(), Phase::Midgame);
+                    self.npm -= get_raw_piece_value(m.captured_piece_type.unwrap())
+                        .get_for_phase(Phase::Midgame);
                 }
 
                 if m.is_en_passant {
@@ -505,7 +506,7 @@ impl Board {
                 Some(ppt) => {
                     let promoted_piece = Piece::new(player_color, ppt);
                     self.place_piece(m.dest, promoted_piece);
-                    self.npm += get_raw_piece_value(ppt, Phase::Midgame);
+                    self.npm += get_raw_piece_value(ppt).get_for_phase(Phase::Midgame);
                 }
                 None => {
                     // If it isn't a promotion, put the src piece on the dest square
