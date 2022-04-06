@@ -5,7 +5,7 @@ use crate::r#move::Move;
 
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
-use std::ops::{Add, AddAssign, Neg, Sub};
+use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 use strum::IntoEnumIterator;
 
 static MIDGAME_PHASE_LIMIT: i32 = 15258; // Upper bound of midgame material value
@@ -38,6 +38,14 @@ impl Sub for Score {
 
     fn sub(self, other: Self) -> Self {
         Score(self.0 - other.0, self.1 - other.1)
+    }
+}
+
+impl Mul<i32> for Score {
+    type Output = Self;
+
+    fn mul(self, other: i32) -> Self {
+        Score(self.0 * other, self.1 * other)
     }
 }
 
@@ -145,6 +153,8 @@ static WHITE_KING_POSITIONAL_VALUE: [[Score; 8]; 8] = [
 static NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY: [Score; 4] =
     [Score(50, 0), Score(-100, 0), Score(-200, 0), Score(-400, 0)];
 
+static KING_ATTACKERS_WEIGHT: [i32; 7] = [0, 50, 75, 88, 94, 97, 99];
+
 lazy_static! {
     static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
         let mut vals = [[[[Score(0, 0); 8]; 8]; 6]; 2];
@@ -211,6 +221,16 @@ lazy_static! {
             table[PieceType::Queen as usize][i] = *score;
         }
 
+        table
+    };
+
+
+    static ref KING_ATTACKERS_PENALTY: [Score; 6] = {
+        let mut table: [Score; 6] = [Score(0, 0); 6];
+        table[PieceType::Bishop as usize] =  Score(-20, 0);
+        table[PieceType::Knight as usize] =  Score(-20, 0);
+        table[PieceType::Rook as usize] =  Score(-40, 0);
+        table[PieceType::Queen as usize] =  Score(-80, 0);
         table
     };
 }
@@ -455,6 +475,73 @@ fn calculate_piece_type_mobility(
 }
 
 fn calculate_king_safety(board: &Board, color: Color) -> Score {
+    calculate_king_open_files(board, color) + calculate_king_attackers_penalty(board, color)
+}
+
+// Inspired by https://www.chessprogramming.org/King_Safety - Attacking King Zone
+fn calculate_king_attackers_penalty(board: &Board, color: Color) -> Score {
+    let mut num_attackers = 0;
+    let mut score = Score(0, 0);
+
+    if let Some(king_coord) = board.get_king_coordinate(color) {
+        // The 8 squares around the king
+        let king_ring = get_piece_attacks_bb(PieceType::King, king_coord);
+
+        for piece_type in [
+            PieceType::Knight,
+            PieceType::Bishop,
+            PieceType::Rook,
+            PieceType::Queen,
+        ] {
+            let mut squares_with_pieces =
+                board.get_piece_type_bb_for_color(piece_type, color.other_color());
+            while squares_with_pieces != 0 {
+                let (curr_sq, popped_pieces) = pop_lsb(squares_with_pieces);
+                squares_with_pieces = popped_pieces;
+
+                let attacked_squares = match piece_type {
+                    // Take into account batteries and x-rays
+                    PieceType::Bishop => get_sliding_attacks_occupied(
+                        PieceType::Bishop,
+                        Coordinate::from_bb(curr_sq),
+                        board.get_all_pieces_bb(),
+                    ),
+                    // Take into account stacked rooks and queens
+                    PieceType::Rook => get_sliding_attacks_occupied(
+                        PieceType::Rook,
+                        Coordinate::from_bb(curr_sq),
+                        board.get_all_pieces_bb(),
+                    ),
+                    PieceType::Queen => get_sliding_attacks_occupied(
+                        PieceType::Queen,
+                        Coordinate::from_bb(curr_sq),
+                        board.get_all_pieces_bb(),
+                    ),
+                    PieceType::Knight => {
+                        get_piece_attacks_bb(PieceType::Knight, Coordinate::from_bb(curr_sq))
+                    }
+                    _ => panic!("Unexpected piece type: {:?}", piece_type),
+                } & king_ring;
+
+                if attacked_squares != 0 {
+                    num_attackers += 1;
+                    score += get_king_attackers_penalty(piece_type)
+                        * attacked_squares.count_ones() as i32;
+                }
+            }
+        }
+
+        let weight = KING_ATTACKERS_WEIGHT[num_attackers.min(6)] as f64 / 100.0;
+        score = Score(
+            (weight * score.0 as f64) as i32,
+            (weight * score.1 as f64) as i32,
+        );
+    }
+
+    score
+}
+
+fn calculate_king_open_files(board: &Board, color: Color) -> Score {
     let mut num_semi_open_king_files = 0;
 
     if let Some(king_coord) = board.get_king_coordinate(color) {
@@ -487,6 +574,10 @@ fn calculate_king_safety(board: &Board, color: Color) -> Score {
         }
     }
     NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[num_semi_open_king_files as usize]
+}
+
+fn get_king_attackers_penalty(pt: PieceType) -> Score {
+    KING_ATTACKERS_PENALTY[pt as usize]
 }
 
 #[cfg(test)]
@@ -985,7 +1076,7 @@ mod king_safety {
         }
 
         assert_eq!(
-            calculate_king_safety(&board, Color::White),
+            calculate_king_open_files(&board, Color::White),
             NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[0]
         );
     }
@@ -1006,7 +1097,7 @@ mod king_safety {
         }
 
         assert_eq!(
-            calculate_king_safety(&board, Color::White),
+            calculate_king_open_files(&board, Color::White),
             NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[1]
         );
     }
@@ -1025,7 +1116,7 @@ mod king_safety {
         }
 
         assert_eq!(
-            calculate_king_safety(&board, Color::White),
+            calculate_king_open_files(&board, Color::White),
             NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[2]
         );
     }
@@ -1044,8 +1135,79 @@ mod king_safety {
         }
 
         assert_eq!(
-            calculate_king_safety(&board, Color::White),
+            calculate_king_open_files(&board, Color::White),
             NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[3]
         );
+    }
+
+    #[test]
+    fn doubled_f_pawns_black() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::F6, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::G8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_open_files(&board, Color::Black),
+            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[1]
+        );
+    }
+
+    #[test]
+    fn rook_attacks_white_king() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Rook, Coordinate::F8, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        let score = calculate_king_attackers_penalty(&board, Color::White);
+
+        // 1 attacker, 2 squares
+        assert_eq!(score, Score(-(2.0 * 0.5 * 40.0) as i32, 0));
+    }
+
+    #[test]
+    fn knight_attacks_white_king() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Knight, Coordinate::G3, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        let score = calculate_king_attackers_penalty(&board, Color::White);
+
+        // 1 attacker, 2 squares
+        assert_eq!(score, Score(-(2.0 * 0.5 * 20.0) as i32, 0));
+    }
+
+    #[test]
+    fn bishop_queen_attack_white_king() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Queen, Coordinate::H3, Color::Black),
+            (PieceType::Bishop, Coordinate::F3, Color::Black),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        let score = calculate_king_attackers_penalty(&board, Color::White);
+
+        // 2 attacker, Bishop hits 2 squares, Queen hits 4 squares
+        assert_eq!(score, Score(-(0.75 * (2.0 * 20.0 + 4.0 * 80.0)) as i32, 0));
     }
 }
