@@ -143,6 +143,10 @@ impl Move {
         return self.piece.piece_type == PieceType::Pawn
             && self.dest.rank_difference(self.src).abs() == 2;
     }
+
+    pub fn is_castling(&self) -> bool {
+        self.castling_side != CastlingSide::Unknown
+    }
 }
 
 #[cfg(test)]

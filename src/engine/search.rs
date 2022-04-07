@@ -9,7 +9,7 @@ use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
 
 static CHECKMATE_SCORE: i32 = 320000;
-static STALEMATE_SCORE: i32 = 0;
+static DRAW_SCORE: i32 = 0;
 static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
 static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
 static FUTILITY_MARGIN: i32 = 800; // Equal to the value of a minor piece
@@ -56,7 +56,7 @@ impl Searcher {
             let mut searcher = self.clone();
             let search_depth = self.search_depth - 1;
             let m = m.clone();
-            searcher.game.apply_move(m);
+            searcher.game.apply_move(&m);
             pool.execute(move || {
                 // Whether a move can be pruned depends on whether it is a capture
                 let curr_eval = -searcher.alpha_beta(
@@ -96,7 +96,10 @@ impl Searcher {
             GameState::WhiteWon | GameState::BlackWon => {
                 return -(CHECKMATE_SCORE - searched_depth as i32)
             }
-            GameState::Stalemate => return STALEMATE_SCORE,
+            GameState::Stalemate => return DRAW_SCORE,
+        }
+        if self.game.is_threefold_repetition() {
+            return DRAW_SCORE;
         }
 
         searched_depth += 1;
@@ -118,7 +121,7 @@ impl Searcher {
 
         for m in legal_moves {
             self.nodes_searched += 1;
-            self.game.apply_move(m);
+            self.game.apply_move(&m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
             let score = -self.alpha_beta(
@@ -155,7 +158,10 @@ impl Searcher {
             GameState::WhiteWon | GameState::BlackWon => {
                 return -(CHECKMATE_SCORE - searched_depth as i32)
             }
-            GameState::Stalemate => return STALEMATE_SCORE,
+            GameState::Stalemate => return DRAW_SCORE,
+        }
+        if self.game.is_threefold_repetition() {
+            return DRAW_SCORE;
         }
 
         searched_depth += 1;
@@ -198,7 +204,7 @@ impl Searcher {
             }
             self.nodes_searched += 1;
 
-            self.game.apply_move(m);
+            self.game.apply_move(&m);
             let score = -self.quiesce(-beta, -alpha, !is_white, searched_depth);
             self.game.undo_move();
 
@@ -217,7 +223,7 @@ impl Searcher {
     pub fn apply_best_move(&mut self) {
         match self.get_best_move() {
             Ok(m) => {
-                self.game.apply_move(m);
+                self.game.apply_move(&m);
             }
             Err(e) => panic!("Unable to apply best move. Error: {}", e),
         }

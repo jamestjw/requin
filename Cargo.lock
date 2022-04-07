@@ -420,6 +420,7 @@ dependencies = [
  "mockall_double",
  "num_enum",
  "rand",
+ "rand_chacha",
  "regex",
  "structopt",
  "strum",
