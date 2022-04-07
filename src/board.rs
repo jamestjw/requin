@@ -5,12 +5,14 @@ use crate::engine::get_raw_piece_value;
 use crate::generator::get_attackers_of_square_bb;
 use crate::log_2;
 use crate::r#move::{CastlingSide, Move};
+use crate::zobrist::{Key, ZOBRIST_TABLE};
 use colored::Colorize;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::fmt;
 
 use regex::Regex;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub static FILE_LIST: [&str; 8] = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -246,6 +248,7 @@ bitfield! {
     get_black_queenside, set_black_queenside: 3;
 }
 
+#[allow(dead_code)]
 impl CastlingRights {
     pub fn new_with_all_disabled() -> Self {
         CastlingRights(0)
@@ -274,6 +277,7 @@ pub struct Board {
     en_passant_square: Option<Coordinate>,
     // Non-pawn material
     npm: i32, // Note: Caching this to avoid constant recalculation
+    zobrist: Key,
 }
 
 impl Board {
@@ -288,6 +292,7 @@ impl Board {
             castling_rights: CastlingRights::new_with_all_disabled(),
             en_passant_square: None,
             npm: 0,
+            zobrist: 0,
         }
     }
 
@@ -295,7 +300,10 @@ impl Board {
         let mut board = Board::new_empty();
 
         // At the starting position, both players have their castling rights
-        board.castling_rights = CastlingRights::new_with_all_enabled();
+        board.enable_castling(Color::White, true);
+        board.enable_castling(Color::White, false);
+        board.enable_castling(Color::Black, true);
+        board.enable_castling(Color::Black, false);
 
         let pieces = [
             (Coordinate::A1, Color::White, PieceType::Rook),
@@ -357,6 +365,9 @@ impl Board {
             self.piece_type_bbs[piece.piece_type as usize],
             coord as usize,
         );
+
+        // Set zobrist
+        self.zobrist ^= ZOBRIST_TABLE.get_piece(coord, piece.piece_type, piece.color);
     }
 
     pub fn remove_piece(&mut self, coord: Coordinate) -> Option<Piece> {
@@ -371,6 +382,11 @@ impl Board {
                 self.piece_type_bbs[piece.piece_type as usize],
                 coord as usize,
             );
+        }
+
+        // Unset zobrist
+        if let Some(piece) = piece {
+            self.zobrist ^= ZOBRIST_TABLE.get_piece(coord, piece.piece_type, piece.color);
         }
 
         piece
@@ -410,7 +426,10 @@ impl Board {
     }
 
     pub fn set_player_color(&mut self, color: Color) {
-        self.player_turn = color;
+        if self.player_turn != color {
+            self.player_turn = color;
+            self.zobrist ^= ZOBRIST_TABLE.get_black_to_move();
+        }
     }
 
     pub fn get_opposing_player_color(&self) -> Color {
@@ -444,16 +463,28 @@ impl Board {
         match color {
             Color::White => {
                 if kingside {
-                    self.castling_rights.set_white_kingside(true)
+                    if !self.castling_rights.get_white_kingside() {
+                        self.castling_rights.set_white_kingside(true);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 } else {
-                    self.castling_rights.set_white_queenside(true)
+                    if !self.castling_rights.get_white_queenside() {
+                        self.castling_rights.set_white_queenside(true);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 }
             }
             Color::Black => {
                 if kingside {
-                    self.castling_rights.set_black_kingside(true)
+                    if !self.castling_rights.get_black_kingside() {
+                        self.castling_rights.set_black_kingside(true);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 } else {
-                    self.castling_rights.set_black_queenside(true)
+                    if !self.castling_rights.get_black_queenside() {
+                        self.castling_rights.set_black_queenside(true);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 }
             }
         }
@@ -463,16 +494,28 @@ impl Board {
         match color {
             Color::White => {
                 if kingside {
-                    self.castling_rights.set_white_kingside(false)
+                    if self.castling_rights.get_white_kingside() {
+                        self.castling_rights.set_white_kingside(false);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 } else {
-                    self.castling_rights.set_white_queenside(false)
+                    if self.castling_rights.get_white_queenside() {
+                        self.castling_rights.set_white_queenside(false);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 }
             }
             Color::Black => {
                 if kingside {
-                    self.castling_rights.set_black_kingside(false)
+                    if self.castling_rights.get_black_kingside() {
+                        self.castling_rights.set_black_kingside(false);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 } else {
-                    self.castling_rights.set_black_queenside(false)
+                    if self.castling_rights.get_black_queenside() {
+                        self.castling_rights.set_black_queenside(false);
+                        self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(kingside, color);
+                    }
                 }
             }
         }
@@ -608,18 +651,20 @@ impl Board {
             }
         }
 
-        // Set en passant square
-        self.en_passant_square = if m.is_pawn_double_advance() {
-            // Get the square 'behind' the pawn
-            match m.piece.color {
-                Color::White => Some(m.dest.vertical_offset(1, false)),
-                Color::Black => Some(m.dest.vertical_offset(1, true)),
-            }
-        } else {
-            None
-        };
+        // Remove previous en passant square if there was one
+        self.remove_en_passant_square();
 
-        self.player_turn = self.get_opposing_player_color();
+        // Set en passant square
+        if m.is_pawn_double_advance() {
+            // Get the square 'behind' the pawn
+            let en_passant_square = match m.piece.color {
+                Color::White => m.dest.vertical_offset(1, false),
+                Color::Black => m.dest.vertical_offset(1, true),
+            };
+
+            self.set_en_passant_square(en_passant_square);
+        }
+        self.set_player_color(self.get_opposing_player_color());
 
         self.update_board_state();
     }
@@ -692,6 +737,15 @@ impl Board {
 
     pub fn set_en_passant_square(&mut self, coord: Coordinate) {
         self.en_passant_square = Some(coord);
+        self.zobrist ^= ZOBRIST_TABLE.get_en_passant_file(coord.get_file());
+    }
+
+    pub fn remove_en_passant_square(&mut self) {
+        // First unset en passant file in the Zobrist hash if it exists
+        if let Some(en_passant_square) = self.en_passant_square {
+            self.zobrist ^= ZOBRIST_TABLE.get_en_passant_file(en_passant_square.get_file());
+            self.en_passant_square = None;
+        }
     }
 
     pub fn update_npm(&mut self) {
@@ -783,6 +837,37 @@ impl Board {
         }
     }
 
+    // Note: This is currently unused as the Zobrist key is built up
+    // as a side effect of setting up the board.
+    pub fn _load_zobrist(&mut self) {
+        self.zobrist = 0;
+        for (i, piece) in self.pieces.iter().enumerate() {
+            if let Some(piece) = piece {
+                self.zobrist ^= ZOBRIST_TABLE.get_piece(
+                    Coordinate::try_from(i as usize).unwrap(),
+                    piece.piece_type,
+                    piece.color,
+                );
+            }
+        }
+
+        if let Some(en_passant_square) = self.en_passant_square {
+            self.zobrist ^= ZOBRIST_TABLE.get_en_passant_file(en_passant_square.get_file());
+        }
+
+        if !self.is_white_turn() {
+            self.zobrist ^= ZOBRIST_TABLE.get_black_to_move();
+        }
+
+        for color in Color::iter() {
+            for is_kingside in [true, false] {
+                if self.may_castle(color, is_kingside) {
+                    self.zobrist ^= ZOBRIST_TABLE.get_castling_rights(is_kingside, color);
+                }
+            }
+        }
+    }
+
     pub fn get_king_shields(&self, color: Color) -> Bitboard {
         self.king_shields[color as usize]
     }
@@ -790,9 +875,13 @@ impl Board {
     pub fn get_checkers(&self) -> Bitboard {
         self.checkers
     }
+
+    pub fn get_zobrist(&self) -> Key {
+        self.zobrist
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum Color {
     White,
     Black,
@@ -1885,5 +1974,68 @@ mod board_tests {
         board.update_board_state();
 
         assert!(!board.is_in_check());
+    }
+
+    #[test]
+    fn starting_pos_zobrist() {
+        let board = Board::new_starting_pos();
+        assert_ne!(board.get_zobrist(), 0);
+    }
+
+    #[test]
+    fn verify_equality_of_zobrist_move_repetition() {
+        let mut board = Board::new_starting_pos();
+        let mut last_zobrist = board.get_zobrist();
+
+        board
+            .apply_move_with_src_dest(Coordinate::E2, Coordinate::E4, None)
+            .unwrap();
+        assert_ne!(last_zobrist, board.get_zobrist());
+        last_zobrist = board.get_zobrist();
+
+        board
+            .apply_move_with_src_dest(Coordinate::E7, Coordinate::E5, None)
+            .unwrap();
+        assert_ne!(last_zobrist, board.get_zobrist());
+
+        board
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::E2, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::E7, None)
+            .unwrap();
+
+        let first_repetition_zobrist = board.get_zobrist();
+        board
+            .apply_move_with_src_dest(Coordinate::E2, Coordinate::E1, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E7, Coordinate::E8, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::E2, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::E7, None)
+            .unwrap();
+        let second_repetition_zobrist = board.get_zobrist();
+
+        assert_eq!(first_repetition_zobrist, second_repetition_zobrist);
+
+        board
+            .apply_move_with_src_dest(Coordinate::E2, Coordinate::E1, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E7, Coordinate::E8, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E1, Coordinate::E2, None)
+            .unwrap();
+        board
+            .apply_move_with_src_dest(Coordinate::E8, Coordinate::E7, None)
+            .unwrap();
+        let third_repetition_zobrist = board.get_zobrist();
+
+        assert_eq!(second_repetition_zobrist, third_repetition_zobrist);
     }
 }

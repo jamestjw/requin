@@ -26,19 +26,19 @@ impl GameState {
 
 #[derive(Clone)]
 pub struct Game {
-    move_list: Vec<Move>,
     board_history: Vec<Board>,
     current_legal_moves: Option<Vec<Move>>, // Legal moves for the current board
     pub state: GameState,
+    plies_from_last_irreversible_move: u32, // When this is zero, it implies that the last played move was irreversible
 }
 
 impl Game {
     pub fn new(starting_board: Board) -> Game {
         Game {
-            move_list: vec![],
             board_history: vec![starting_board],
             current_legal_moves: Some(generate_legal_moves(&starting_board)),
             state: GameState::InProgress,
+            plies_from_last_irreversible_move: 0,
         }
     }
 
@@ -257,7 +257,7 @@ impl Game {
                         }
                     };
 
-                    self.apply_move(m);
+                    self.apply_move(&m);
                     break;
                 }
                 Err(_) => println!("Invalid move, please try again."),
@@ -280,11 +280,19 @@ impl Game {
         self.generate_legal_moves();
     }
 
-    pub fn apply_move(&mut self, m: Move) {
+    pub fn apply_move(&mut self, m: &Move) {
         let mut new_board = self.current_board().clone();
         new_board.apply_move(&m);
         self.board_history.push(new_board);
-        self.move_list.push(m);
+
+        // Check if the move is irreversible
+        // TODO: Moves that change castling rights should also be included
+        if m.is_capture || m.piece.piece_type == PieceType::Pawn || m.is_castling() {
+            self.plies_from_last_irreversible_move = 0;
+        } else {
+            self.plies_from_last_irreversible_move += 1;
+        }
+
         self.generate_legal_moves();
 
         if self.current_legal_moves().len() == 0 {
@@ -304,14 +312,46 @@ impl Game {
     }
 
     pub fn undo_move(&mut self) {
-        self.move_list.pop();
         self.board_history.pop();
         self.current_legal_moves = None;
         self.state = GameState::InProgress;
+        self.plies_from_last_irreversible_move =
+            self.plies_from_last_irreversible_move.saturating_sub(1);
     }
 
     pub fn is_game_over(&self) -> bool {
         self.state != GameState::InProgress
+    }
+
+    pub fn is_threefold_repetition(&self) -> bool {
+        if self.plies_from_last_irreversible_move < 8 {
+            return false;
+        }
+
+        let current_zobrist = self.current_board().get_zobrist();
+        let mut num_matches = 0;
+
+        for ply_offset in (4..=self.plies_from_last_irreversible_move).step_by(2) {
+            let index = self.board_history.len() - 1 - ply_offset as usize;
+
+            match self.board_history.get(index) {
+                Some(b) => {
+                    if current_zobrist == b.get_zobrist() {
+                        num_matches += 1;
+                    }
+                }
+                None => {
+                    // This should never occur
+                    panic!("Missing board at index {}", index);
+                }
+            }
+
+            if num_matches == 2 {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -804,5 +844,66 @@ mod game_tests {
             )
             .unwrap();
         assert_eq!(found_move, expected_move);
+    }
+
+    #[test]
+    fn threefold_repetition_bongcloud() {
+        let board = Board::new_starting_pos();
+        let mut game = Game::new(board);
+        let white_pawn_advance = Move::new(
+            Coordinate::E2,
+            Coordinate::E4,
+            Piece::new(Color::White, PieceType::Pawn),
+        );
+        let black_pawn_advance = Move::new(
+            Coordinate::E7,
+            Coordinate::E5,
+            Piece::new(Color::Black, PieceType::Pawn),
+        );
+        let white_king_advance = Move::new(
+            Coordinate::E1,
+            Coordinate::E2,
+            Piece::new(Color::White, PieceType::King),
+        );
+        let black_king_advance = Move::new(
+            Coordinate::E8,
+            Coordinate::E7,
+            Piece::new(Color::Black, PieceType::King),
+        );
+        let white_king_retreat = Move::new(
+            Coordinate::E2,
+            Coordinate::E1,
+            Piece::new(Color::White, PieceType::King),
+        );
+        let black_king_retreat = Move::new(
+            Coordinate::E7,
+            Coordinate::E8,
+            Piece::new(Color::Black, PieceType::King),
+        );
+
+        game.apply_move(&white_pawn_advance);
+        game.apply_move(&black_pawn_advance);
+        assert!(!game.is_threefold_repetition());
+
+        game.apply_move(&white_king_advance);
+        game.apply_move(&black_king_advance);
+        assert!(!game.is_threefold_repetition());
+
+        game.apply_move(&white_king_retreat);
+        game.apply_move(&black_king_retreat);
+        assert!(!game.is_threefold_repetition());
+
+        game.apply_move(&white_king_advance);
+        game.apply_move(&black_king_advance);
+        assert!(!game.is_threefold_repetition());
+
+        game.apply_move(&white_king_retreat);
+        game.apply_move(&black_king_retreat);
+        assert!(!game.is_threefold_repetition());
+
+        game.apply_move(&white_king_advance);
+        game.apply_move(&black_king_advance);
+
+        assert!(game.is_threefold_repetition());
     }
 }

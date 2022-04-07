@@ -6,6 +6,7 @@ pub mod generator;
 pub mod r#move;
 pub mod parser;
 pub mod uci;
+pub mod zobrist;
 
 pub use bitboard::init_tables;
 use board::Board;
