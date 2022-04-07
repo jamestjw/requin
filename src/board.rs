@@ -818,8 +818,8 @@ pub enum PieceType {
     Bishop,
     Knight,
     Rook,
-    King,
     Queen,
+    King,
 }
 
 impl PieceType {
