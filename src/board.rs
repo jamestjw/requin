@@ -982,6 +982,20 @@ pub fn file_to_index(s: &str) -> usize {
     1 + FILE_LIST.iter().position(|f| s.eq(*f)).unwrap()
 }
 
+// Rank should be between 1 to 8
+pub fn relative_rank(rank: usize, color: Color) -> usize {
+    match color {
+        Color::White => rank,
+        Color::Black => ((rank - 1) ^ 7) + 1,
+    }
+}
+
+// Expect input between 1 to 8, returns zero if it is the 1st or 8th rank/file,
+// returns 1 if it is the 2nd or 7th rank/file etc
+pub fn dist_from_edge(rank_or_file: usize) -> usize {
+    (rank_or_file - 1).min(8 - rank_or_file)
+}
+
 #[cfg(test)]
 mod coord_tests {
     use super::*;
@@ -2037,5 +2051,38 @@ mod board_tests {
         let third_repetition_zobrist = board.get_zobrist();
 
         assert_eq!(second_repetition_zobrist, third_repetition_zobrist);
+    }
+
+    #[test]
+    fn relative_ranks() {
+        assert_eq!(relative_rank(1, Color::White), 1);
+        assert_eq!(relative_rank(2, Color::White), 2);
+        assert_eq!(relative_rank(3, Color::White), 3);
+        assert_eq!(relative_rank(4, Color::White), 4);
+        assert_eq!(relative_rank(5, Color::White), 5);
+        assert_eq!(relative_rank(6, Color::White), 6);
+        assert_eq!(relative_rank(7, Color::White), 7);
+        assert_eq!(relative_rank(8, Color::White), 8);
+
+        assert_eq!(relative_rank(1, Color::Black), 8);
+        assert_eq!(relative_rank(2, Color::Black), 7);
+        assert_eq!(relative_rank(3, Color::Black), 6);
+        assert_eq!(relative_rank(4, Color::Black), 5);
+        assert_eq!(relative_rank(5, Color::Black), 4);
+        assert_eq!(relative_rank(6, Color::Black), 3);
+        assert_eq!(relative_rank(7, Color::Black), 2);
+        assert_eq!(relative_rank(8, Color::Black), 1);
+    }
+
+    #[test]
+    fn distances_from_edge() {
+        assert_eq!(dist_from_edge(1), 0);
+        assert_eq!(dist_from_edge(2), 1);
+        assert_eq!(dist_from_edge(3), 2);
+        assert_eq!(dist_from_edge(4), 3);
+        assert_eq!(dist_from_edge(5), 3);
+        assert_eq!(dist_from_edge(6), 2);
+        assert_eq!(dist_from_edge(7), 1);
+        assert_eq!(dist_from_edge(8), 0);
     }
 }

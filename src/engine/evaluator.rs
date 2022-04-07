@@ -1,5 +1,7 @@
 use crate::bitboard::*;
-use crate::board::{Board, Color, Coordinate, Phase, Piece, PieceType};
+use crate::board::{
+    dist_from_edge, relative_rank, Board, Color, Coordinate, Phase, Piece, PieceType,
+};
 use crate::generator::get_attackers_of_square_bb;
 use crate::r#move::Move;
 
@@ -148,12 +150,52 @@ static WHITE_KING_POSITIONAL_VALUE: [[Score; 8]; 8] = [
     [ Score( 59, 11), Score( 89, 59), Score( 45,  73), Score( -1,  78), Score( -1,  78), Score( 45,  73), Score( 89,  59), Score( 59,  11) ],
 ];
 
-// Assume that it's fine to have half open files near the king
-// in the endgame
-static NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY: [Score; 4] =
-    [Score(50, 0), Score(-100, 0), Score(-200, 0), Score(-400, 0)];
-
 static KING_ATTACKERS_WEIGHT: [i32; 7] = [0, 50, 75, 88, 94, 97, 99];
+
+// Based on distance from the edge of the board, i.e. in the following order H file, G file, F file, E file
+// Based on the rank, rank 1 is the bonus when there are no pawns sheltering the king
+static KING_PAWN_DEFENDER_BONUS: [[Score; 7]; 4] = [
+    // Pushing the pawn to H3 is fine, pushing it further is not great
+    [
+        Score(-5, 0),
+        Score(75, 0),
+        Score(75, 0),
+        Score(50, 0),
+        Score(40, 0),
+        Score(30, 0),
+        Score(35, 0),
+    ],
+    // Not having a G-pawn is terrible, pushing it to g3 is not terrible, pushing it to g4 or further is bad
+    [
+        Score(-50, 0),
+        Score(75, 0),
+        Score(30, 0),
+        Score(-50, 0),
+        Score(-40, 0),
+        Score(-30, 0),
+        Score(-20, 0),
+    ],
+    // Not having an F-pawn is not horrible, pushing it isn't too terrible
+    [
+        Score(-5, 0),
+        Score(75, 0),
+        Score(30, 0),
+        Score(0, 0),
+        Score(0, 0),
+        Score(0, 0),
+        Score(0, 0),
+    ],
+    // If the king is on the F-file, it doesn't quite matter where the E-pawn is, the king should castle
+    [
+        Score(-40, 0),
+        Score(-12, 0),
+        Score(-30, 0),
+        Score(-50, 0),
+        Score(-50, 0),
+        Score(-50, 0),
+        Score(-50, 0),
+    ],
+];
 
 lazy_static! {
     static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
@@ -475,8 +517,7 @@ fn calculate_piece_type_mobility(
 }
 
 fn calculate_king_safety(board: &Board, color: Color) -> Score {
-    // calculate_king_open_files(board, color) + calculate_king_attackers_penalty(board, color)
-    calculate_king_attackers_penalty(board, color)
+    calculate_king_attackers_penalty(board, color) + calculate_king_pawn_formation(board, color)
 }
 
 // Inspired by https://www.chessprogramming.org/King_Safety - Attacking King Zone
@@ -542,39 +583,45 @@ fn calculate_king_attackers_penalty(board: &Board, color: Color) -> Score {
     score
 }
 
-fn calculate_king_open_files(board: &Board, color: Color) -> Score {
-    let mut num_semi_open_king_files = 0;
+// Assign bonuses and penalties based on the pawn formation in front
+// of the king
+fn calculate_king_pawn_formation(board: &Board, color: Color) -> Score {
+    let mut score = Score(0, 0);
 
     if let Some(king_coord) = board.get_king_coordinate(color) {
-        let king_file = king_coord.get_file();
-        let king_file_bb = FILES_BB[king_file - 1];
-        let our_pawns = board.get_piece_type_bb_for_color(PieceType::Pawn, color);
+        // We take into the king's file along with the two files by its side
+        // We also handle the case where the king is on the A or H file, in which
+        // case we assume that the king is on the B or G file to cover all files
+        // in front of the king.
+        let center_file = king_coord
+            .get_file()
+            .min(7) // G file
+            .max(2); // B file
+                     // Get pawns that are 'in front' of the king
+        let defending_pawns = board.get_piece_type_bb_for_color(PieceType::Pawn, color)
+            & !get_forward_ranks_bb_for_color(king_coord.get_rank(), color.other_color());
 
-        // Check for semi open files, i.e. files where we dont have pawns
-        // This should also incentivise the engine to not double its pawns near its
-        // king.
-        // TODO: Implement a bigger penalty for fully opened files?
-        if king_file_bb & our_pawns == 0 {
-            num_semi_open_king_files += 1;
-        }
+        for file in (center_file - 1)..=(center_file + 1) {
+            let file_bb = FILES_BB[file - 1];
+            let file_defenders = defending_pawns & file_bb;
+            // Get the pawn that is closest to the king, we want the lowest bit,
+            // which is why we use the opposite color.
+            let closest_defender = frontmost_bit(file_defenders, color.other_color());
 
-        // Check if there is a file on the left
-        if king_file > 1 {
-            let left_file_bb = FILES_BB[king_file - 2];
-            if left_file_bb & our_pawns == 0 {
-                num_semi_open_king_files += 1;
-            }
-        }
+            // We get a relative rank, so that we can use the same lookup tables based
+            // on the distance between the pawn and the king.
+            let rel_defender_rank = if closest_defender != 0 {
+                relative_rank(Coordinate::from_bb(closest_defender).get_rank(), color) - 1
+            } else {
+                0 // The 0th index contains the score when there is no pawn sheltering the king
+            };
+            // We use a symmetric table for both sides of the board
+            let distance_to_edge = dist_from_edge(file);
 
-        // Check if there is a file on the right
-        if king_file < 8 {
-            let right_file_bb = FILES_BB[king_file];
-            if right_file_bb & our_pawns == 0 {
-                num_semi_open_king_files += 1;
-            }
+            score += KING_PAWN_DEFENDER_BONUS[distance_to_edge][rel_defender_rank];
         }
     }
-    NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[num_semi_open_king_files as usize]
+    score
 }
 
 fn get_king_attackers_penalty(pt: PieceType) -> Score {
@@ -1061,106 +1108,6 @@ mod king_safety {
     use super::*;
 
     #[test]
-    fn no_half_open_files_white() {
-        let mut board = Board::new_empty();
-        let pieces = [
-            (PieceType::Pawn, Coordinate::F2, Color::White),
-            (PieceType::Pawn, Coordinate::G2, Color::White),
-            (PieceType::Pawn, Coordinate::H2, Color::White),
-            (PieceType::Pawn, Coordinate::F7, Color::Black),
-            (PieceType::Pawn, Coordinate::G7, Color::Black),
-            (PieceType::Pawn, Coordinate::H7, Color::Black),
-            (PieceType::King, Coordinate::G1, Color::White),
-        ];
-        for (p, coord, color) in pieces {
-            board.place_piece(coord, Piece::new(color, p));
-        }
-
-        assert_eq!(
-            calculate_king_open_files(&board, Color::White),
-            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[0]
-        );
-    }
-
-    #[test]
-    fn one_half_open_file_white_missing_white_g_pawn() {
-        let mut board = Board::new_empty();
-        let pieces = [
-            (PieceType::Pawn, Coordinate::F2, Color::White),
-            (PieceType::Pawn, Coordinate::H2, Color::White),
-            (PieceType::Pawn, Coordinate::F7, Color::Black),
-            (PieceType::Pawn, Coordinate::G7, Color::Black),
-            (PieceType::Pawn, Coordinate::H7, Color::Black),
-            (PieceType::King, Coordinate::G1, Color::White),
-        ];
-        for (p, coord, color) in pieces {
-            board.place_piece(coord, Piece::new(color, p));
-        }
-
-        assert_eq!(
-            calculate_king_open_files(&board, Color::White),
-            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[1]
-        );
-    }
-
-    #[test]
-    fn two_half_open_files_white_missing_white_gh_pawn() {
-        let mut board = Board::new_empty();
-        let pieces = [
-            (PieceType::Pawn, Coordinate::F7, Color::Black),
-            (PieceType::Pawn, Coordinate::G7, Color::Black),
-            (PieceType::Pawn, Coordinate::H7, Color::Black),
-            (PieceType::King, Coordinate::H1, Color::White),
-        ];
-        for (p, coord, color) in pieces {
-            board.place_piece(coord, Piece::new(color, p));
-        }
-
-        assert_eq!(
-            calculate_king_open_files(&board, Color::White),
-            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[2]
-        );
-    }
-
-    #[test]
-    fn three_half_open_files_white_missing_white_pawns() {
-        let mut board = Board::new_empty();
-        let pieces = [
-            (PieceType::Pawn, Coordinate::F7, Color::Black),
-            (PieceType::Pawn, Coordinate::G7, Color::Black),
-            (PieceType::Pawn, Coordinate::H7, Color::Black),
-            (PieceType::King, Coordinate::G1, Color::White),
-        ];
-        for (p, coord, color) in pieces {
-            board.place_piece(coord, Piece::new(color, p));
-        }
-
-        assert_eq!(
-            calculate_king_open_files(&board, Color::White),
-            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[3]
-        );
-    }
-
-    #[test]
-    fn doubled_f_pawns_black() {
-        let mut board = Board::new_empty();
-        let pieces = [
-            (PieceType::Pawn, Coordinate::F7, Color::Black),
-            (PieceType::Pawn, Coordinate::F6, Color::Black),
-            (PieceType::Pawn, Coordinate::H7, Color::Black),
-            (PieceType::King, Coordinate::G8, Color::Black),
-        ];
-        for (p, coord, color) in pieces {
-            board.place_piece(coord, Piece::new(color, p));
-        }
-
-        assert_eq!(
-            calculate_king_open_files(&board, Color::Black),
-            NUM_HALF_OPEN_FILES_NEAR_KING_PENALTY[1]
-        );
-    }
-
-    #[test]
     fn rook_attacks_white_king() {
         let mut board = Board::new_empty();
         let pieces = [
@@ -1210,5 +1157,154 @@ mod king_safety {
 
         // 2 attacker, Bishop hits 2 squares, Queen hits 4 squares
         assert_eq!(score, Score(-(0.75 * (2.0 * 20.0 + 4.0 * 80.0)) as i32, 0));
+    }
+
+    #[test]
+    fn no_half_open_files_white_king_on_g1() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::G2, Color::White),
+            (PieceType::Pawn, Coordinate::H2, Color::White),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::White),
+            Score(75 + 75 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn missing_g_pawn_white_king_on_g1() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::H2, Color::White),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::White),
+            Score(75 - 50 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn missing_g_pawn_white_king_on_h1() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::H2, Color::White),
+            (PieceType::King, Coordinate::H1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        // Same score as being on g1
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::White),
+            Score(75 - 50 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn pawn_on_g4_h5_white_king_on_g1() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F2, Color::White),
+            (PieceType::Pawn, Coordinate::G4, Color::White),
+            (PieceType::Pawn, Coordinate::H5, Color::White),
+            (PieceType::King, Coordinate::G1, Color::White),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::White),
+            Score(40 - 50 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn no_half_open_files_black_king_on_g8() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::F7, Color::Black),
+            (PieceType::Pawn, Coordinate::G7, Color::Black),
+            (PieceType::Pawn, Coordinate::H7, Color::Black),
+            (PieceType::King, Coordinate::G8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::Black),
+            Score(75 + 75 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn missing_b_and_c_pawns_black_king_on_b8() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::A7, Color::Black),
+            (PieceType::King, Coordinate::B8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::Black),
+            Score(75 - 50 - 5, 0)
+        );
+    }
+
+    #[test]
+    fn fianchettoed_black_king_on_b8() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::A7, Color::Black),
+            (PieceType::Pawn, Coordinate::B6, Color::Black),
+            (PieceType::Pawn, Coordinate::C7, Color::Black),
+            (PieceType::King, Coordinate::B8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::Black),
+            Score(75 + 30 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn fianchettoed_black_king_on_b7() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::A7, Color::Black),
+            (PieceType::Pawn, Coordinate::B6, Color::Black),
+            (PieceType::Pawn, Coordinate::C7, Color::Black),
+            (PieceType::King, Coordinate::B7, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_king_pawn_formation(&board, Color::Black),
+            Score(75 + 30 + 75, 0)
+        );
     }
 }
