@@ -475,7 +475,8 @@ fn calculate_piece_type_mobility(
 }
 
 fn calculate_king_safety(board: &Board, color: Color) -> Score {
-    calculate_king_open_files(board, color) + calculate_king_attackers_penalty(board, color)
+    // calculate_king_open_files(board, color) + calculate_king_attackers_penalty(board, color)
+    calculate_king_attackers_penalty(board, color)
 }
 
 // Inspired by https://www.chessprogramming.org/King_Safety - Attacking King Zone
