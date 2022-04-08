@@ -404,6 +404,15 @@ pub fn get_pawn_attacks_bb(color: Color, src: Coordinate) -> Bitboard {
     PAWN_ATTACKS_BB[color as usize][src as usize]
 }
 
+// Given a Bitboard containing all the pawns of a color, return a Bitboard containing
+// all attacked squares
+pub fn get_pawn_attacks_bb_for_bitboard(color: Color, pawns: Bitboard) -> Bitboard {
+    match color {
+        Color::White => shift_bitboard(pawns, Direction::NE) | shift_bitboard(pawns, Direction::NW),
+        Color::Black => shift_bitboard(pawns, Direction::SE) | shift_bitboard(pawns, Direction::SW),
+    }
+}
+
 // Currently only implemented for knights and kings
 pub fn get_piece_attacks_bb(piece_type: PieceType, src: Coordinate) -> Bitboard {
     PIECE_TYPE_ATTACKS[piece_type as usize][src as usize]
@@ -418,6 +427,15 @@ pub fn get_pawn_attacks_from_bb(mut pawns: Bitboard, color: Color) -> Bitboard {
     }
 
     attacks
+}
+
+pub fn get_pawn_front_squares(src: Coordinate, color: Color) -> Bitboard {
+    let dest = match color {
+        Color::White => Coordinate::new_from_rank_file(8, src.get_file()),
+        Color::Black => Coordinate::new_from_rank_file(1, src.get_file()),
+    };
+
+    path_between(src, dest)
 }
 
 pub fn init_tables() {
@@ -970,5 +988,69 @@ mod magic_bitboards {
             Coordinate::B1.to_bb()
         );
         assert_eq!(get_pawn_attacks_bb(Color::Black, Coordinate::C1), 0);
+    }
+
+    #[test]
+    fn pawn_attacks_white() {
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(Color::White, Coordinate::H7.to_bb()),
+            Coordinate::G8.to_bb()
+        );
+
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(Color::White, Coordinate::E4.to_bb()),
+            Coordinate::D5.to_bb() | Coordinate::F5.to_bb()
+        );
+
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(
+                Color::White,
+                Coordinate::F6.to_bb() | Coordinate::G6.to_bb() | Coordinate::H6.to_bb()
+            ),
+            Coordinate::E7.to_bb()
+                | Coordinate::F7.to_bb()
+                | Coordinate::G7.to_bb()
+                | Coordinate::H7.to_bb()
+        );
+    }
+
+    #[test]
+    fn pawn_attacks_black() {
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(Color::Black, Coordinate::H7.to_bb()),
+            Coordinate::G6.to_bb()
+        );
+
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(Color::Black, Coordinate::C4.to_bb()),
+            Coordinate::D3.to_bb() | Coordinate::B3.to_bb()
+        );
+
+        assert_eq!(
+            get_pawn_attacks_bb_for_bitboard(
+                Color::Black,
+                Coordinate::C6.to_bb() | Coordinate::E5.to_bb() | Coordinate::H2.to_bb()
+            ),
+            Coordinate::B5.to_bb()
+                | Coordinate::D5.to_bb()
+                | Coordinate::F4.to_bb()
+                | Coordinate::D4.to_bb()
+                | Coordinate::G1.to_bb()
+        );
+    }
+
+    #[test]
+    fn pawn_front_squares() {
+        assert_eq!(
+            get_pawn_front_squares(Coordinate::E4, Color::White),
+            Coordinate::E5.to_bb()
+                | Coordinate::E6.to_bb()
+                | Coordinate::E7.to_bb()
+                | Coordinate::E8.to_bb()
+        );
+        assert_eq!(
+            get_pawn_front_squares(Coordinate::E4, Color::Black),
+            Coordinate::E3.to_bb() | Coordinate::E2.to_bb() | Coordinate::E1.to_bb()
+        );
     }
 }

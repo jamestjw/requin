@@ -8,10 +8,7 @@ use lazy_static::lazy_static;
 use std::convert::TryFrom;
 use std::slice::Iter;
 
-pub use threats::{
-    edge_to_edge_bb, get_pawn_attacks_bb, get_pawn_attacks_from_bb, get_piece_attacks_bb,
-    get_sliding_attacks_occupied, init_tables, path_between, sliding_attack_blockers,
-};
+pub use threats::*;
 
 pub type Bitboard = u64;
 
@@ -164,6 +161,19 @@ impl Direction {
         static DIAG_DIRECTIONS: [Direction; 4] =
             [Direction::NE, Direction::NW, Direction::SE, Direction::SW];
         DIAG_DIRECTIONS.iter()
+    }
+}
+
+pub fn shift_bitboard(b: Bitboard, direction: Direction) -> Bitboard {
+    match direction {
+        Direction::N => b.wrapping_shl(8),
+        Direction::S => b.wrapping_shr(8),
+        Direction::E => (b & !H_FILE_BB).wrapping_shl(1),
+        Direction::W => (b & !A_FILE_BB).wrapping_shr(1),
+        Direction::NE => (b & !H_FILE_BB).wrapping_shl(9),
+        Direction::NW => (b & !A_FILE_BB).wrapping_shl(7),
+        Direction::SE => (b & !H_FILE_BB).wrapping_shr(7),
+        Direction::SW => (b & !A_FILE_BB).wrapping_shr(9),
     }
 }
 
