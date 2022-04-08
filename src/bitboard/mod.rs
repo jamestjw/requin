@@ -49,6 +49,9 @@ pub static FILES_BB: [Bitboard; 8] = [
     A_FILE_BB, B_FILE_BB, C_FILE_BB, D_FILE_BB, E_FILE_BB, F_FILE_BB, G_FILE_BB, H_FILE_BB,
 ];
 
+pub static WHITE_KINGSIDE_KING_PAWN_SHIELD: Bitboard = 0b111000001110000000000000;
+pub static WHITE_KINGSIDE_KING_BEHIND_PAWN_SHIELD: Bitboard = 0b11100000;
+
 pub fn get_bitboard(bitboard: Bitboard, idx: usize) -> bool {
     (bitboard & (1 << idx)) != 0
 }
@@ -94,10 +97,21 @@ fn get_file_bb_for_coordinate(coord: Coordinate) -> Bitboard {
     A_FILE_BB << (coord.get_file() - 1)
 }
 
+pub fn get_forward_ranks_bb_for_color(rank: usize, color: Color) -> Bitboard {
+    match color {
+        Color::White => (!RANK_1_BB).wrapping_shl(8 * (rank as u32 - 1)),
+        Color::Black => (!RANK_8_BB).wrapping_shr(8 * (relative_rank(rank, color) as u32 - 1)),
+    }
+}
+
 // TODO: Investigate the usage of de Bruijn sequences to do this
 // https://stackoverflow.com/questions/757059/position-of-least-significant-bit-that-is-set
 pub fn lsb(b: Bitboard) -> Bitboard {
     b & (1u64.wrapping_shl(b.trailing_zeros()))
+}
+
+pub fn msb(b: Bitboard) -> Bitboard {
+    b & (1u64.wrapping_shl(64u32.saturating_sub(b.leading_zeros() + 1)))
 }
 
 // Returns the LSB and the popped version of the Bitboard
@@ -111,6 +125,17 @@ pub fn more_than_one(b: Bitboard) -> bool {
     // we can immediately tell that there is more than one bit that
     // is set
     pop_lsb(b).1 != 0
+}
+
+pub fn frontmost_bit(b: Bitboard, color: Color) -> Bitboard {
+    match color {
+        Color::White => msb(b),
+        Color::Black => lsb(b),
+    }
+}
+
+pub fn flip_vertical(b: Bitboard) -> Bitboard {
+    b ^ 56
 }
 
 use strum_macros::EnumIter;
@@ -223,11 +248,64 @@ mod bitboard_tests {
     }
 
     #[test]
+    fn test_msb() {
+        assert_eq!(msb(0b00110100), 0b00100000);
+        assert_eq!(msb(0b0010), 0b0010);
+        assert_eq!(msb(0b1), 0b1);
+        assert_eq!(msb(0b0), 0b0);
+    }
+
+    #[test]
     fn test_more_than_one() {
         assert!(more_than_one(0b11));
         assert!(more_than_one(0b110));
         assert!(!more_than_one(0b0));
         assert!(!more_than_one(0b1));
         assert!(!more_than_one(0b10));
+    }
+
+    #[test]
+    fn white_kingside_pawn_shield() {
+        let expected_squares = [
+            Coordinate::F2,
+            Coordinate::G2,
+            Coordinate::H2,
+            Coordinate::F3,
+            Coordinate::G3,
+            Coordinate::H3,
+        ];
+
+        let mut expected_bb = 0;
+
+        for sq in expected_squares {
+            expected_bb |= get_bb_for_coordinate(sq);
+        }
+        assert_eq!(expected_bb, WHITE_KINGSIDE_KING_PAWN_SHIELD);
+    }
+
+    #[test]
+    fn forward_ranks() {
+        // All ranks except first rank
+        assert_eq!(get_forward_ranks_bb_for_color(1, Color::White), !RANK_1_BB);
+        // Same as above minus the second rank
+        assert_eq!(
+            get_forward_ranks_bb_for_color(2, Color::White),
+            !RANK_1_BB ^ RANK_2_BB
+        );
+        // Same as above minus the third rank
+        assert_eq!(
+            get_forward_ranks_bb_for_color(3, Color::White),
+            !RANK_1_BB ^ RANK_2_BB ^ RANK_3_BB
+        );
+        assert_eq!(get_forward_ranks_bb_for_color(7, Color::White), RANK_8_BB);
+        assert_eq!(get_forward_ranks_bb_for_color(8, Color::White), 0);
+
+        assert_eq!(get_forward_ranks_bb_for_color(1, Color::Black), 0);
+        assert_eq!(get_forward_ranks_bb_for_color(2, Color::Black), RANK_1_BB);
+        assert_eq!(get_forward_ranks_bb_for_color(8, Color::Black), !RANK_8_BB);
+        assert_eq!(
+            get_forward_ranks_bb_for_color(7, Color::Black),
+            !RANK_8_BB ^ RANK_7_BB
+        );
     }
 }
