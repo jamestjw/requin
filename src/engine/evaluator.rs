@@ -295,7 +295,7 @@ pub fn get_raw_piece_value(pt: PieceType) -> Score {
         PieceType::Bishop => Score(825, 915),
         PieceType::Rook => Score(1276, 1380),
         PieceType::Queen => Score(2538, 2682),
-        PieceType::King => Score(0, 0),
+        PieceType::King => Score(9999, 9999),
     }
 }
 
@@ -406,8 +406,19 @@ pub fn evaluate_board(board: &Board) -> i32 {
 
 // Finds the piece with the least value that is attacking
 // a square. Returns the piece and its source square
+#[allow(dead_code)]
 fn get_smallest_attacker(board: &Board, square: Coordinate) -> Option<(Piece, Coordinate)> {
-    let color = board.get_player_color();
+    get_smallest_attacker_for_color(board, square, board.get_player_color())
+}
+
+// Finds the piece with the least value that is attacking
+// a square. Returns the piece and its source square
+#[allow(dead_code)]
+fn get_smallest_attacker_for_color(
+    board: &Board,
+    square: Coordinate,
+    color: Color,
+) -> Option<(Piece, Coordinate)> {
     let attacks = get_attackers_of_square_bb(board, square, color, board.get_all_pieces_bb());
 
     // In ascending order of piece value
@@ -431,29 +442,102 @@ fn get_smallest_attacker(board: &Board, square: Coordinate) -> Option<(Piece, Co
     None
 }
 
-// Assume that there is something to be captured on the square
-// This function applies moves to the board without undoing it.
-fn static_exchange_evaluation(mut board: Board, square: Coordinate) -> i32 {
-    if let Some((piece, src)) = get_smallest_attacker(&board, square) {
-        let victim_piece_type = board
-            .get_from_coordinate(square)
-            .expect("There should be a piece to capture here")
-            .piece_type;
-        let attacking_move = Move::new_capture(src, square, piece, victim_piece_type);
-        board.apply_move(&attacking_move);
-        return get_raw_piece_value(victim_piece_type).get_for_phase(Phase::Midgame)
-            - static_exchange_evaluation(board, square);
-    } else {
+pub fn static_exchange_evaluation_capture(&board: &Board, m: &Move) -> i32 {
+    if !m.is_capture {
         return 0;
     }
-}
-
-pub fn static_exchange_evaluation_capture(mut board: Board, m: &Move) -> i32 {
+    let target_square = m.dest;
     // TODO: Deal with en passant
-    if let Some(victim_piece) = board.get_from_coordinate(m.dest) {
-        board.apply_move(m);
-        return get_raw_piece_value(victim_piece.piece_type).get_for_phase(Phase::Midgame)
-            - static_exchange_evaluation(board, m.dest);
+    if let Some(victim_piece) = board.get_from_coordinate(target_square) {
+        let mut score = get_raw_piece_value(victim_piece.piece_type).get_for_phase(Phase::Midgame);
+        // Remove the pieces involved in this move from the equation
+        let mut occupied = board.get_all_pieces_bb() ^ m.src.to_bb() ^ m.dest.to_bb();
+        // Get all other attackers of the square
+        let mut attackers =
+            (get_attackers_of_square_bb(&board, target_square, Color::White, occupied)
+                | get_attackers_of_square_bb(&board, target_square, Color::Black, occupied))
+                ^ m.src.to_bb();
+        // Because we artificially "apply" the first move, we assume it's
+        // the second player's move now.
+        let mut is_initial_player = false;
+        let mut last_piece_type = m.piece.piece_type;
+        loop {
+            // Filter out attackers that have already been evaluated
+            attackers &= occupied;
+            let color_to_move = if is_initial_player {
+                board.get_player_color()
+            } else {
+                board.get_opposing_player_color()
+            };
+            let current_attackers = attackers & board.get_color_bb(color_to_move);
+
+            // TODO: What if a piece is pinned?
+            if current_attackers == 0 {
+                break;
+            }
+
+            // Put current capturing piece here
+            let temp_piece_type: Option<PieceType>;
+
+            // If there is a valid pawn attacker
+            if current_attackers & board.get_piece_type_bb(PieceType::Pawn) != 0 {
+                // Remove pawn from the board
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::Pawn));
+                // Check if this unleases any other attackers on the square
+                attackers |=
+                    get_sliding_attacks_occupied(PieceType::Bishop, target_square, occupied)
+                        & board.get_piece_types_bb(PieceType::Queen, PieceType::Bishop);
+                temp_piece_type = Some(PieceType::Pawn);
+            } else if current_attackers & board.get_piece_type_bb(PieceType::Knight) != 0 {
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::Knight));
+                temp_piece_type = Some(PieceType::Knight);
+            } else if current_attackers & board.get_piece_type_bb(PieceType::Bishop) != 0 {
+                // Remove bishop from the board
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::Bishop));
+                // Check if this unleases any other attackers on the square
+                attackers |=
+                    get_sliding_attacks_occupied(PieceType::Bishop, target_square, occupied)
+                        & board.get_piece_types_bb(PieceType::Queen, PieceType::Bishop);
+                temp_piece_type = Some(PieceType::Bishop);
+            } else if current_attackers & board.get_piece_type_bb(PieceType::Rook) != 0 {
+                // Remove rook from the board
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::Rook));
+                // Check if this unleases any other attackers on the square
+                attackers |= get_sliding_attacks_occupied(PieceType::Rook, target_square, occupied)
+                    & board.get_piece_types_bb(PieceType::Queen, PieceType::Rook);
+                temp_piece_type = Some(PieceType::Rook);
+            } else if current_attackers & board.get_piece_type_bb(PieceType::Queen) != 0 {
+                // Remove rook from the board
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::Queen));
+                // Check if this unleases any other attackers on the square
+                attackers |=
+                    get_sliding_attacks_occupied(PieceType::Bishop, target_square, occupied)
+                        & board.get_piece_types_bb(PieceType::Queen, PieceType::Bishop);
+                attackers |= get_sliding_attacks_occupied(PieceType::Rook, target_square, occupied)
+                    & board.get_piece_types_bb(PieceType::Queen, PieceType::Rook);
+                temp_piece_type = Some(PieceType::Queen);
+            } else {
+                // King attack
+                // Remove rook from the board
+                occupied ^= lsb(current_attackers & board.get_piece_type_bb(PieceType::King));
+                // Check if this unleases any other attackers on the square
+                attackers |=
+                    get_sliding_attacks_occupied(PieceType::Bishop, target_square, occupied)
+                        & board.get_piece_types_bb(PieceType::Queen, PieceType::Bishop);
+                attackers |= get_sliding_attacks_occupied(PieceType::Rook, target_square, occupied)
+                    & board.get_piece_types_bb(PieceType::Queen, PieceType::Rook);
+                temp_piece_type = Some(PieceType::King);
+            }
+
+            if is_initial_player {
+                score += get_raw_piece_value(last_piece_type).get_for_phase(Phase::Midgame);
+            } else {
+                score -= get_raw_piece_value(last_piece_type).get_for_phase(Phase::Midgame);
+            }
+            is_initial_player = !is_initial_player;
+            last_piece_type = temp_piece_type.unwrap();
+        }
+        return score;
     } else {
         return 0;
     }
@@ -463,7 +547,7 @@ pub fn non_pawn_material(board: &Board) -> i32 {
     let mut val = 0;
     for piece in board.get_pieces() {
         if let Some(piece) = piece {
-            if piece.piece_type != PieceType::Pawn {
+            if piece.piece_type != PieceType::Pawn && piece.piece_type != PieceType::King {
                 val += get_raw_piece_value(piece.piece_type).get_for_phase(Phase::Midgame);
             }
         }
@@ -823,8 +907,14 @@ mod test {
             board.place_piece(coord, Piece::new(color, p));
             board.update_board_state();
         }
+        let m = Move::new_capture(
+            Coordinate::C3,
+            Coordinate::D5,
+            Piece::new(Color::White, PieceType::Knight),
+            PieceType::Pawn,
+        );
         assert_eq!(
-            static_exchange_evaluation(board, Coordinate::D5),
+            static_exchange_evaluation_capture(&board, &m),
             get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame)
         );
     }
@@ -841,8 +931,15 @@ mod test {
         for (p, coord, color) in pieces {
             board.place_piece(coord, Piece::new(color, p));
         }
+        let m = Move::new_capture(
+            Coordinate::C3,
+            Coordinate::D5,
+            Piece::new(Color::White, PieceType::Knight),
+            PieceType::Pawn,
+        );
+
         assert_eq!(
-            static_exchange_evaluation(board, Coordinate::D5),
+            static_exchange_evaluation_capture(&board, &m),
             get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame)
                 - get_raw_piece_value(PieceType::Knight).get_for_phase(Phase::Midgame)
         );
@@ -861,8 +958,15 @@ mod test {
         for (p, coord, color) in pieces {
             board.place_piece(coord, Piece::new(color, p));
         }
+        let m = Move::new_capture(
+            Coordinate::E4,
+            Coordinate::D5,
+            Piece::new(Color::White, PieceType::Pawn),
+            PieceType::Pawn,
+        );
+
         assert_eq!(
-            static_exchange_evaluation(board, Coordinate::D5),
+            static_exchange_evaluation_capture(&board, &m),
             get_raw_piece_value(PieceType::Knight).get_for_phase(Phase::Midgame)
         );
     }
@@ -882,8 +986,15 @@ mod test {
         for (p, coord, color) in pieces {
             board.place_piece(coord, Piece::new(color, p));
         }
+        let m = Move::new_capture(
+            Coordinate::D4,
+            Coordinate::E5,
+            Piece::new(Color::White, PieceType::Pawn),
+            PieceType::Pawn,
+        );
+
         assert_eq!(
-            static_exchange_evaluation(board, Coordinate::E5),
+            static_exchange_evaluation_capture(&board, &m),
             get_raw_piece_value(PieceType::Rook).get_for_phase(Phase::Midgame)
         );
     }
@@ -903,8 +1014,14 @@ mod test {
         for (p, coord, color) in pieces {
             board.place_piece(coord, Piece::new(color, p));
         }
+        let m = Move::new_capture(
+            Coordinate::D4,
+            Coordinate::E5,
+            Piece::new(Color::White, PieceType::Pawn),
+            PieceType::Pawn,
+        );
         assert_eq!(
-            static_exchange_evaluation(board, Coordinate::E5),
+            static_exchange_evaluation_capture(&board, &m),
             get_raw_piece_value(PieceType::Rook).get_for_phase(Phase::Midgame)
                 + get_raw_piece_value(PieceType::Bishop).get_for_phase(Phase::Midgame)
                 - get_raw_piece_value(PieceType::Queen).get_for_phase(Phase::Midgame)

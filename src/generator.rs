@@ -441,6 +441,43 @@ pub fn get_attackers_of_square_bb(
             & board.get_piece_types_bb_for_color(PieceType::Bishop, PieceType::Queen, color))
 }
 
+pub fn get_attackers_of_square_bb_for_piece_type(
+    board: &Board,
+    target: Coordinate,
+    piece_type: PieceType,
+    color: Color,
+    occupied: Bitboard,
+) -> Bitboard {
+    match piece_type {
+        PieceType::Pawn => {
+            get_pawn_attacks_bb(color.other_color(), target)
+                & board.get_piece_type_bb_for_color(PieceType::Pawn, color)
+        }
+        PieceType::King => {
+            get_piece_attacks_bb(PieceType::King, target)
+                & board.get_piece_type_bb_for_color(PieceType::King, color)
+        }
+        PieceType::Knight => {
+            get_piece_attacks_bb(PieceType::Knight, target)
+                & board.get_piece_type_bb_for_color(PieceType::Knight, color)
+        }
+        PieceType::Rook => {
+            get_sliding_attacks_occupied(PieceType::Rook, target, occupied)
+                & board.get_piece_type_bb_for_color(PieceType::Rook, color)
+        }
+        PieceType::Bishop => {
+            get_sliding_attacks_occupied(PieceType::Bishop, target, occupied)
+                & board.get_piece_type_bb_for_color(PieceType::Bishop, color)
+        }
+        PieceType::Queen => {
+            (get_sliding_attacks_occupied(PieceType::Rook, target, occupied)
+                & board.get_piece_type_bb_for_color(PieceType::Queen, color))
+                | (get_sliding_attacks_occupied(PieceType::Bishop, target, occupied)
+                    & board.get_piece_type_bb_for_color(PieceType::Queen, color))
+        }
+    }
+}
+
 pub fn is_square_controlled_by_player(board: &Board, color: Color, square: Coordinate) -> bool {
     get_attackers_of_square_bb(board, square, color, board.get_all_pieces_bb()) != 0
 }
