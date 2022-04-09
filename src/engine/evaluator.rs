@@ -197,6 +197,17 @@ static KING_PAWN_DEFENDER_BONUS: [[Score; 7]; 4] = [
     ],
 ];
 
+// Bonus for a passed pawn being on a certain rank
+static PASSED_PAWN_BONUS: [Score; 7] = [
+    Score(0, 0),
+    Score(10, 0),
+    Score(20, 0),
+    Score(30, 0),
+    Score(65, 0),
+    Score(90, 0),
+    Score(130, 0),
+];
+
 lazy_static! {
     static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
         let mut vals = [[[[Score(0, 0); 8]; 8]; 6]; 2];
@@ -382,6 +393,10 @@ pub fn evaluate_board(board: &Board) -> i32 {
     // Calculate king safety
     score +=
         calculate_king_safety(board, Color::White) - calculate_king_safety(board, Color::Black);
+
+    // Calculate passed pawns bonus
+    score += calculate_passed_pawns_bonus(board, Color::White)
+        - calculate_passed_pawns_bonus(board, Color::Black);
 
     let midgame_score = score.get_for_phase(Phase::Midgame);
     let endgame_score = score.get_for_phase(Phase::Endgame);
@@ -619,6 +634,29 @@ fn calculate_king_pawn_formation(board: &Board, color: Color) -> Score {
             let distance_to_edge = dist_from_edge(file);
 
             score += KING_PAWN_DEFENDER_BONUS[distance_to_edge][rel_defender_rank];
+        }
+    }
+    score
+}
+
+fn calculate_passed_pawns_bonus(board: &Board, color: Color) -> Score {
+    let mut score = Score(0, 0);
+    let mut our_pawns = board.get_piece_type_bb_for_color(PieceType::Pawn, color);
+    let enemy_pawns = board.get_piece_type_bb_for_color(PieceType::Pawn, color.other_color());
+    let enemy_pawns_attack = get_pawn_attacks_bb_for_bitboard(color.other_color(), enemy_pawns);
+
+    while our_pawns != 0 {
+        let (current_pawn, popped_pawns) = pop_lsb(our_pawns);
+        let current_pawn_coordinate = Coordinate::from_bb(current_pawn);
+        our_pawns = popped_pawns;
+
+        let pawn_path = get_pawn_front_squares(current_pawn_coordinate, color);
+
+        // Identify if a current pawn is a passed pawn by checking if the
+        // squares in its path are occupied or attacked by enemy pawns
+        if (pawn_path & (enemy_pawns | enemy_pawns_attack)) == 0 {
+            let rel_rank = relative_rank(current_pawn_coordinate.get_rank(), color);
+            score += PASSED_PAWN_BONUS[rel_rank - 1];
         }
     }
     score
@@ -1305,6 +1343,65 @@ mod king_safety {
         assert_eq!(
             calculate_king_pawn_formation(&board, Color::Black),
             Score(75 + 30 + 75, 0)
+        );
+    }
+
+    #[test]
+    fn passed_pawn_bonus_white() {
+        let mut board = Board::new_empty();
+        let pieces = [(PieceType::Pawn, Coordinate::A5, Color::White)];
+
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_passed_pawns_bonus(&board, Color::White),
+            PASSED_PAWN_BONUS[5 - 1]
+        );
+    }
+
+    #[test]
+    fn non_passed_pawn_by_obstruction_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::A5, Color::White),
+            (PieceType::Pawn, Coordinate::A6, Color::Black),
+        ];
+
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_passed_pawns_bonus(&board, Color::White),
+            Score(0, 0)
+        );
+        assert_eq!(
+            calculate_passed_pawns_bonus(&board, Color::Black),
+            Score(0, 0)
+        );
+    }
+
+    #[test]
+    fn non_passed_pawn_by_attacks_white() {
+        let mut board = Board::new_empty();
+        let pieces = [
+            (PieceType::Pawn, Coordinate::A5, Color::White),
+            (PieceType::Pawn, Coordinate::B7, Color::Black),
+        ];
+
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+
+        assert_eq!(
+            calculate_passed_pawns_bonus(&board, Color::White),
+            Score(0, 0)
+        );
+        assert_eq!(
+            calculate_passed_pawns_bonus(&board, Color::Black),
+            Score(0, 0)
         );
     }
 }
