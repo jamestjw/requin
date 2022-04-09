@@ -117,9 +117,31 @@ impl Searcher {
             }
         }
 
-        let legal_moves = self.game.current_legal_moves().clone();
+        // Move ordering
+        // 1. Good captures
+        // 2. Bad captures
+        // 3. Non-captures
+        let mut legal_moves = self
+            .game
+            .current_legal_moves()
+            .clone()
+            .into_iter()
+            .map(|m| {
+                (
+                    m,
+                    if m.is_capture {
+                        static_exchange_evaluation_capture(self.game.current_board().clone(), &m)
+                    } else {
+                        // Give non-captures a low score for them to be evaluated last
+                        i32::MIN
+                    },
+                )
+            })
+            .collect::<Vec<(Move, i32)>>();
 
-        for m in legal_moves {
+        legal_moves.sort_by(|(_, score1), (_, score2)| score2.cmp(score1));
+
+        for (m, _) in legal_moves {
             self.nodes_searched += 1;
             self.game.apply_move(&m);
             // Whether or not a node can be pruned depends on whether
