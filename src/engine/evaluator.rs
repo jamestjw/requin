@@ -868,6 +868,50 @@ mod test {
     }
 
     #[test]
+    fn static_exchange_evaluation_with_battery_queen_behind() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::White);
+        let pieces = [
+            (PieceType::Queen, Coordinate::A1, Color::White),
+            (PieceType::Bishop, Coordinate::B2, Color::White),
+            (PieceType::Pawn, Coordinate::D4, Color::White),
+            (PieceType::Pawn, Coordinate::E5, Color::Black),
+            (PieceType::Rook, Coordinate::E8, Color::Black),
+            (PieceType::Bishop, Coordinate::H8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        assert_eq!(
+            static_exchange_evaluation(board, Coordinate::E5),
+            get_raw_piece_value(PieceType::Rook).get_for_phase(Phase::Midgame)
+        );
+    }
+
+    #[test]
+    fn static_exchange_evaluation_with_battery_bishop_behind() {
+        let mut board = Board::new_empty();
+        board.set_player_color(Color::White);
+        let pieces = [
+            (PieceType::Queen, Coordinate::B2, Color::White),
+            (PieceType::Bishop, Coordinate::A1, Color::White),
+            (PieceType::Pawn, Coordinate::D4, Color::White),
+            (PieceType::Pawn, Coordinate::E5, Color::Black),
+            (PieceType::Rook, Coordinate::E8, Color::Black),
+            (PieceType::Bishop, Coordinate::H8, Color::Black),
+        ];
+        for (p, coord, color) in pieces {
+            board.place_piece(coord, Piece::new(color, p));
+        }
+        assert_eq!(
+            static_exchange_evaluation(board, Coordinate::E5),
+            get_raw_piece_value(PieceType::Rook).get_for_phase(Phase::Midgame)
+                + get_raw_piece_value(PieceType::Bishop).get_for_phase(Phase::Midgame)
+                - get_raw_piece_value(PieceType::Queen).get_for_phase(Phase::Midgame)
+        );
+    }
+
+    #[test]
     fn phase_calculation_with_full_board() {
         let board = Board::new_starting_pos();
         assert_eq!(calculate_phase(&board), MIDGAME_SCALE);
