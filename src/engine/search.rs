@@ -130,7 +130,7 @@ impl Searcher {
                 (
                     m,
                     if m.is_capture {
-                        static_exchange_evaluation_capture(self.game.current_board().clone(), &m)
+                        static_exchange_evaluation_capture(self.game.current_board(), &m)
                     } else {
                         // Give non-captures a low score for them to be evaluated last
                         i32::MIN
@@ -213,7 +213,7 @@ impl Searcher {
             .map(|m| {
                 (
                     m,
-                    static_exchange_evaluation_capture(self.game.current_board().clone(), &m),
+                    static_exchange_evaluation_capture(&self.game.current_board(), &m),
                 )
             })
             .collect::<Vec<(Move, i32)>>();
