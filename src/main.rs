@@ -6,7 +6,7 @@ use structopt::StructOpt;
 #[structopt(
     name = "requin",
     about = "A CLI chess program with a chess engine.",
-    version = "1.2.0"
+    version = "1.3.0"
 )]
 struct Opt {
     #[structopt(
