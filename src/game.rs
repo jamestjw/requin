@@ -280,6 +280,30 @@ impl Game {
         self.generate_legal_moves();
     }
 
+    // This must not be called if the side to move is in check
+    pub fn apply_null_move(&mut self) {
+        let mut new_board = self.current_board().clone();
+        new_board.set_player_color(new_board.get_opposing_player_color());
+        self.board_history.push(new_board);
+        // Null moves are reversible
+        self.plies_from_last_irreversible_move += 1;
+        self.generate_legal_moves();
+        if self.current_legal_moves().len() == 0 {
+            if self.current_board().is_in_check() {
+                match self.current_board().get_player_color() {
+                    Color::White => {
+                        self.state = GameState::BlackWon;
+                    }
+                    Color::Black => {
+                        self.state = GameState::WhiteWon;
+                    }
+                }
+            } else {
+                self.state = GameState::Stalemate;
+            }
+        }
+    }
+
     pub fn apply_move(&mut self, m: &Move) {
         let mut new_board = self.current_board().clone();
         new_board.apply_move(&m);
@@ -321,6 +345,10 @@ impl Game {
 
     pub fn is_game_over(&self) -> bool {
         self.state != GameState::InProgress
+    }
+
+    pub fn is_in_check(&self) -> bool {
+        self.current_board().is_in_check()
     }
 
     pub fn is_threefold_repetition(&self) -> bool {

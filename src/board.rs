@@ -777,6 +777,14 @@ impl Board {
         self.piece_type_bbs[pt as usize] & self.piece_color_bbs[color as usize]
     }
 
+    pub fn get_non_king_pawn_bb_for_color(&self, color: Color) -> Bitboard {
+        self.piece_color_bbs[color as usize]
+            & (self.piece_type_bbs[PieceType::Knight as usize]
+                | self.piece_type_bbs[PieceType::Bishop as usize]
+                | self.piece_type_bbs[PieceType::Rook as usize]
+                | self.piece_type_bbs[PieceType::Queen as usize])
+    }
+
     pub fn get_piece_types_bb_for_color(
         &self,
         pt1: PieceType,

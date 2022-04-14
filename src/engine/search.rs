@@ -1,4 +1,5 @@
 use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
+use crate::board::Color;
 use crate::r#move::Move;
 use crate::{
     game::{Game, GameState},
@@ -14,6 +15,7 @@ static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
 static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
 static FUTILITY_MARGIN: i32 = 800; // Equal to the value of a minor piece
 static DELTA_PRUNING_THRESHOLD: i32 = 2538; // Value of a queen
+static NULL_MOVE_PRUNING_R: u32 = 2;
 
 #[derive(Clone)]
 pub struct Searcher {
@@ -141,8 +143,29 @@ impl Searcher {
 
         legal_moves.sort_by(|(_, score1), (_, score2)| score2.cmp(score1));
 
+        // Maybe do null move pruning
+        if self.may_do_null_move_pruning(remaining_depth - 1, is_white) {
+            self.game.apply_null_move();
+            // Do an alpha beta search with reduced depth
+            let score = -self.alpha_beta(
+                remaining_depth - 1 - NULL_MOVE_PRUNING_R,
+                -beta,
+                -alpha,
+                !is_white,
+                false,
+                searched_depth - 1,
+            );
+            self.game.undo_move();
+            if score >= beta {
+                return beta;
+            }
+        }
+
         for (m, _) in legal_moves {
+            // TODO: Fix how null move pruning makes this value more than
+            // what it should be
             self.nodes_searched += 1;
+
             self.game.apply_move(&m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
@@ -253,5 +276,18 @@ impl Searcher {
 
     pub fn get_nodes_searched(&self) -> u32 {
         self.nodes_searched
+    }
+
+    pub fn may_do_null_move_pruning(&self, remaining_depth: u32, is_white: bool) -> bool {
+        // Ensure that there is still a sufficient amount of material on the board
+        // Ensure that the side to move is not in check
+        // Ensure that the remaining depth is more than the pruning window
+        let color = if is_white { Color::White } else { Color::Black };
+        self.game
+            .current_board()
+            .get_non_king_pawn_bb_for_color(color)
+            != 0
+            && !self.game.is_in_check()
+            && remaining_depth >= NULL_MOVE_PRUNING_R
     }
 }
