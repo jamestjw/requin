@@ -46,7 +46,7 @@ impl Searcher {
     }
 
     pub fn get_best_move(&mut self) -> Result<Move, &str> {
-        let legal_moves = self.game.current_legal_moves();
+        let mut legal_moves = self.game.current_legal_moves().clone();
         let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
         // Save zobrist to fill up the TT
@@ -56,55 +56,63 @@ impl Searcher {
             return Err("No legal moves available.");
         }
 
-        let pool = ThreadPool::new(self.num_threads);
-
         // Workers will send results via tx, main thread
         // receives results via tx
         let (tx, rx) = channel();
 
-        for m in legal_moves {
-            let tx = tx.clone();
-            let mut searcher = self.clone();
-            let search_depth = self.search_depth - 1;
-            let m = m.clone();
-            searcher.game.apply_move(&m);
-            pool.execute(move || {
-                // Whether a move can be pruned depends on whether it is a capture
-                let curr_eval = -searcher.alpha_beta(
-                    search_depth,
-                    INITIAL_ALPHA,
-                    INITIAL_BETA,
-                    is_white_turn,
-                    !m.is_capture,
-                    1, // Start with search depth 1
-                );
+        let max_search_depth = self.search_depth;
+        let mut best_move: Option<Move> = None;
 
-                tx.send((m, curr_eval))
-                    .expect("Unexpected error: Main thread is not receiving.");
-            });
+        // Iterative deepening
+        for current_search_depth in 1..=max_search_depth {
+            let pool = ThreadPool::new(self.num_threads);
+            // Search the best move first, this is useful when the num of available threads is low.
+            legal_moves.sort_by_key(|m| if Some(m) == best_move.as_ref() { 0 } else { 1 });
+            for m in &legal_moves {
+                let tx = tx.clone();
+                let mut searcher = self.clone();
+                let search_depth = current_search_depth - 1;
+                let m = m.clone();
+                searcher.game.apply_move(&m);
+                pool.execute(move || {
+                    // Whether a move can be pruned depends on whether it is a capture
+                    let curr_eval = -searcher.alpha_beta(
+                        search_depth,
+                        INITIAL_ALPHA,
+                        INITIAL_BETA,
+                        is_white_turn,
+                        !m.is_capture,
+                        1, // Start with search depth 1
+                    );
+
+                    tx.send((m, curr_eval))
+                        .expect("Unexpected error: Main thread is not receiving.");
+                });
+            }
+
+            // Assuming that all moves are evaluated successfully without fail
+            let mut move_evals: Vec<(Move, i32)> = rx.iter().take(num_legal_moves).collect();
+
+            move_evals.sort_by(|(_, e1), (_, e2)| e2.cmp(e1));
+
+            let candidate_move = move_evals[0].0;
+            let candidate_move_score = move_evals[0].1;
+
+            // Insert into TT
+            self.tt.set_entry(
+                zobrist,
+                build_tt_entry(
+                    Some(&candidate_move),
+                    zobrist,
+                    current_search_depth,
+                    candidate_move_score,
+                    NodeType::PV,
+                ),
+            );
+            best_move = Some(candidate_move);
         }
 
-        // Assuming that all moves are evaluated successfully without fail
-        let mut move_evals: Vec<(Move, i32)> = rx.iter().take(num_legal_moves).collect();
-
-        move_evals.sort_by(|(_, e1), (_, e2)| e2.cmp(e1));
-
-        let candidate_move = move_evals[0].0;
-        let candidate_move_score = move_evals[0].1;
-
-        // Insert into TT
-        self.tt.set_entry(
-            zobrist,
-            build_tt_entry(
-                Some(&candidate_move),
-                zobrist,
-                self.search_depth as u8,
-                candidate_move_score,
-                NodeType::PV,
-            ),
-        );
-
-        Ok(move_evals[0].0)
+        Ok(best_move.unwrap())
     }
 
     // Inspired by https://www.chessprogramming.org/Alpha-Beta
