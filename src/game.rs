@@ -351,12 +351,16 @@ impl Game {
         self.current_board().is_in_check()
     }
 
+    pub fn get_current_zobrist(&self) -> u64 {
+        self.current_board().get_zobrist()
+    }
+
     pub fn is_threefold_repetition(&self) -> bool {
         if self.plies_from_last_irreversible_move < 8 {
             return false;
         }
 
-        let current_zobrist = self.current_board().get_zobrist();
+        let current_zobrist = self.get_current_zobrist();
         let mut num_matches = 0;
 
         for ply_offset in (4..=self.plies_from_last_irreversible_move).step_by(2) {
