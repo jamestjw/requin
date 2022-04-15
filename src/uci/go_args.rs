@@ -9,7 +9,7 @@ pub struct GoArgs {
     pub winc: Option<u32>,
     pub binc: Option<u32>,
     pub movestogo: Option<u32>,
-    pub depth: u32,
+    pub depth: u8,
     pub nodes: u32,
     pub mate: Option<u32>,
     pub movetime: u32,
@@ -61,7 +61,7 @@ impl GoArgs {
                     res.movestogo = Some(arg_vec.next().unwrap().parse::<u32>().unwrap());
                 }
                 "depth" => {
-                    res.depth = arg_vec.next().unwrap().parse::<u32>().unwrap();
+                    res.depth = arg_vec.next().unwrap().parse::<u8>().unwrap();
                 }
                 "nodes" => {
                     res.nodes = arg_vec.next().unwrap().parse::<u32>().unwrap();
@@ -145,7 +145,7 @@ mod test {
 
     #[test]
     fn test_args_parser_with_searchmoves_and_other_args() {
-        let args = GoArgs::new_from_args_str(" depth 5000 searchmoves e2e4 d2d4 nodes 14".into());
+        let args = GoArgs::new_from_args_str(" depth 250 searchmoves e2e4 d2d4 nodes 14".into());
         assert_eq!(
             args.search_moves,
             Some(vec![
@@ -153,7 +153,7 @@ mod test {
                 (Coordinate::D2, Coordinate::D4, None)
             ])
         );
-        assert_eq!(args.depth, 5000);
+        assert_eq!(args.depth, 250);
         assert_eq!(args.nodes, 14);
     }
 }
