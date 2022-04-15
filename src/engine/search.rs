@@ -13,7 +13,8 @@ static CHECKMATE_SCORE: i32 = 320000;
 static DRAW_SCORE: i32 = 0;
 static INITIAL_ALPHA: i32 = -CHECKMATE_SCORE - 1;
 static INITIAL_BETA: i32 = CHECKMATE_SCORE + 1;
-static FUTILITY_MARGIN: i32 = 800; // Equal to the value of a minor piece
+static FUTILITY_MARGIN_1: i32 = 800; // Approximately equal to the value of a minor piece
+static FUTILITY_MARGIN_2: i32 = 1300; // Approximately equal to the value of a rook
 static DELTA_PRUNING_THRESHOLD: i32 = 2538; // Value of a queen
 static NULL_MOVE_PRUNING_R: u32 = 2;
 
@@ -114,7 +115,16 @@ impl Searcher {
             let eval = offset * evaluate_board(self.game.current_board());
             // If a move proves to be futile, we just return alpha since
             // further continuations are unlikely to raise alpha
-            if eval + FUTILITY_MARGIN < alpha && can_prune {
+            if eval + FUTILITY_MARGIN_1 < alpha && can_prune {
+                return alpha;
+            }
+        } else if remaining_depth == 2 {
+            // Extended futility pruning
+            let offset = if is_white { -1 } else { 1 };
+            let eval = offset * evaluate_board(self.game.current_board());
+            // If a move proves to be futile, we just return alpha since
+            // further continuations are unlikely to raise alpha
+            if eval + FUTILITY_MARGIN_2 < alpha && can_prune {
                 return alpha;
             }
         }
