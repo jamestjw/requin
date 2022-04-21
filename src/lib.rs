@@ -1,4 +1,5 @@
 #![feature(deadline_api)]
+#![feature(div_duration)]
 
 pub mod bitboard;
 pub mod board;

@@ -66,10 +66,22 @@ impl Searcher {
 
         let max_search_depth = self.search_depth;
         let mut best_move: Option<Move> = None;
-        let deadline = time_limit.map(|l| Instant::now() + Duration::from_millis(l as u64));
+        let start_time = Instant::now();
+        let time_limit = time_limit.map(|l| Duration::from_millis(l as u64));
+        let deadline = time_limit.map(|l| start_time + l);
 
         // Iterative deepening
         for current_search_depth in 1..=max_search_depth {
+            let elapsed_time = Instant::now().duration_since(start_time);
+
+            // Consider skipping the current iteration if the time situation is not good
+            if time_limit.is_some() && best_move.is_some() {
+                // Check if 50% of allocated time has been used
+                if elapsed_time.div_duration_f32(time_limit.unwrap()) > 0.5 {
+                    return Ok(best_move.unwrap());
+                }
+            }
+
             let pool = ThreadPool::with_name("requin_searchers".to_string(), self.num_threads);
             // Search the best move first, this is useful when the num of available threads is low.
             legal_moves.sort_by_key(|m| if Some(m) == best_move.as_ref() { 0 } else { 1 });
