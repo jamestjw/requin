@@ -1,5 +1,6 @@
+use super::time::max_search_time;
 use super::{ArcMutexUCIState, GoArgs, UCIOption, UCIOptionType};
-use crate::board::{Board, Coordinate};
+use crate::board::{Board, Color, Coordinate};
 use crate::engine::Searcher;
 use crate::game::Game;
 use crate::parser::parse_fen;
@@ -189,7 +190,6 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
     let mut state = state.lock().unwrap();
     let go_args = GoArgs::new_from_args_str(args_str);
     let depth = go_args.depth;
-    state.go_args = Some(go_args);
 
     let pos = match state.position {
         Some(pos) => pos,
@@ -200,9 +200,18 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
         }
     };
 
-    let mut searcher = Searcher::new(Game::new(pos), depth, state.num_threads);
+    let player_color = pos.get_player_color();
+    let (player_time, player_increment) = match player_color {
+        Color::White => (go_args.wtime, go_args.winc),
+        Color::Black => (go_args.btime, go_args.binc),
+    };
 
-    match searcher.get_best_move(None) {
+    state.go_args = Some(go_args);
+
+    let mut searcher = Searcher::new(Game::new(pos), depth, state.num_threads);
+    let search_time = player_time.map(|t| max_search_time(t, player_increment.unwrap_or(0)));
+
+    match searcher.get_best_move(search_time) {
         Ok(best_move) => {
             writeln!(
                 output,
