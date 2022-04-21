@@ -1,3 +1,5 @@
+#![feature(deadline_api)]
+
 pub mod bitboard;
 pub mod board;
 pub mod engine;

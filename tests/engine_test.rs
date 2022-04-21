@@ -34,7 +34,7 @@ fn test_depth_one_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move =
         Move::new_capture(Coordinate::A1, Coordinate::A8, white_rook, PieceType::Rook);
 
@@ -72,7 +72,7 @@ fn test_depth_one_best_move_black() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 1);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move =
         Move::new_capture(Coordinate::A8, Coordinate::A1, black_rook, PieceType::Rook);
 
@@ -114,7 +114,7 @@ fn test_depth_two_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new_capture(
         Coordinate::D4,
         Coordinate::H4,
@@ -161,7 +161,7 @@ fn test_depth_two_best_move_black() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 2, 1);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new_capture(
         Coordinate::C2,
         Coordinate::A2,
@@ -207,7 +207,7 @@ fn test_depth_three_best_move_white() {
 
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 1);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new(Coordinate::D2, Coordinate::D8, white_rook);
 
     assert_eq!(best_move.unwrap(), expected_move);
@@ -221,7 +221,7 @@ fn white_mate_in_one() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new(
         Coordinate::E2,
         Coordinate::H5,
@@ -239,7 +239,7 @@ fn black_mate_in_one() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 1, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new(
         Coordinate::G5,
         Coordinate::G4,
@@ -257,7 +257,7 @@ fn white_mate_in_two() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new(
         Coordinate::F7,
         Coordinate::D5,
@@ -275,7 +275,7 @@ fn white_mate_in_two_v2() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new(
         Coordinate::D2,
         Coordinate::E1,
@@ -293,7 +293,7 @@ fn black_mate_in_two() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 3, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
     let expected_move = Move::new_capture(
         Coordinate::D1,
         Coordinate::F1,
@@ -312,7 +312,27 @@ fn black_mate_in_three() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 5, 32);
-    let best_move = searcher.get_best_move();
+    let best_move = searcher.get_best_move(None);
+    let expected_move = Move::new(
+        Coordinate::F7,
+        Coordinate::F5,
+        Piece::new(Color::Black, PieceType::Rook),
+    );
+
+    assert_eq!(best_move.unwrap(), expected_move);
+}
+
+#[test]
+/// This test just verifies that a time limit doesn't stop
+/// the engine from searching correctly.
+fn black_mate_in_three_with_time_limit() {
+    let board = parse_fen(String::from(
+        "8/2b2r1P/2P4k/1pK3n1/1N1R1N2/nqp5/8/8 b - - 0 1",
+    ))
+    .unwrap();
+    let game = Game::new(board);
+    let mut searcher = Searcher::new(game, 5, 32);
+    let best_move = searcher.get_best_move(Some(3000));
     let expected_move = Move::new(
         Coordinate::F7,
         Coordinate::F5,

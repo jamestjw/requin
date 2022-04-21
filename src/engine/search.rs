@@ -11,6 +11,7 @@ use crate::{
 };
 
 use std::sync::mpsc::channel;
+use std::time::{Duration, Instant};
 use threadpool::ThreadPool;
 
 static CHECKMATE_SCORE: i32 = 320000;
@@ -45,7 +46,10 @@ impl Searcher {
         }
     }
 
-    pub fn get_best_move(&mut self) -> Result<Move, &str> {
+    /// # Arguments
+    ///
+    /// * `time_limit` - Maximum search time in milliseconds
+    pub fn get_best_move(&mut self, time_limit: Option<u32>) -> Result<Move, &str> {
         let mut legal_moves = self.game.current_legal_moves().clone();
         let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
@@ -62,10 +66,11 @@ impl Searcher {
 
         let max_search_depth = self.search_depth;
         let mut best_move: Option<Move> = None;
+        let deadline = time_limit.map(|l| Instant::now() + Duration::from_millis(l as u64));
 
         // Iterative deepening
         for current_search_depth in 1..=max_search_depth {
-            let pool = ThreadPool::new(self.num_threads);
+            let pool = ThreadPool::with_name("requin_searchers".to_string(), self.num_threads);
             // Search the best move first, this is useful when the num of available threads is low.
             legal_moves.sort_by_key(|m| if Some(m) == best_move.as_ref() { 0 } else { 1 });
             for m in &legal_moves {
@@ -90,8 +95,26 @@ impl Searcher {
                 });
             }
 
-            // Assuming that all moves are evaluated successfully without fail
-            let mut move_evals: Vec<(Move, i32)> = rx.iter().take(num_legal_moves).collect();
+            // We only apply the deadline if we already have a best move, since we need
+            // to forcefully return the best move if we breach the deadline
+            let mut move_evals: Vec<(Move, i32)> = if deadline.is_some() && best_move.is_some() {
+                let mut res = Vec::with_capacity(num_legal_moves);
+                for _ in 0..num_legal_moves {
+                    match rx.recv_deadline(deadline.unwrap()) {
+                        Ok(m) => {
+                            res.push(m);
+                        }
+                        Err(_) => {
+                            // If we timeout, then return the best move that currently have
+                            return Ok(best_move.unwrap());
+                        }
+                    }
+                }
+                res
+            } else {
+                // Assuming that all moves are evaluated successfully without fail
+                rx.iter().take(num_legal_moves).collect()
+            };
 
             move_evals.sort_by(|(_, e1), (_, e2)| e2.cmp(e1));
 
@@ -378,7 +401,7 @@ impl Searcher {
     }
 
     pub fn apply_best_move(&mut self) {
-        match self.get_best_move() {
+        match self.get_best_move(None) {
             Ok(m) => {
                 self.game.apply_move(&m);
             }
@@ -438,7 +461,7 @@ mod test {
         let game = Game::new(board);
         let mut searcher = Searcher::new(game, 1, 32);
 
-        let best_move = searcher.get_best_move().unwrap();
+        let best_move = searcher.get_best_move(None).unwrap();
 
         let tt_entry = searcher.tt.get_entry(zobrist_to_inspect);
         let tt_move_data = tt_entry.get_move_data();
