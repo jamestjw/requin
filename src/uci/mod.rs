@@ -2,6 +2,7 @@ mod client;
 mod go_args;
 mod handler;
 mod output;
+mod time;
 
 pub use client::Client;
 use go_args::GoArgs;

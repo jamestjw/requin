@@ -17,7 +17,7 @@ struct Opt {
     )]
     mode: String,
     #[structopt(short, long, default_value = "5")]
-    depth: u32,
+    depth: u8,
     #[structopt(
         long,
         default_value = "4",

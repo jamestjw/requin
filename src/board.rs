@@ -87,6 +87,12 @@ pub enum Coordinate {
     H8,
 }
 
+impl From<u8> for Coordinate {
+    fn from(coord: u8) -> Self {
+        Coordinate::try_from(coord as usize).unwrap()
+    }
+}
+
 impl Coordinate {
     // Rank is between 1-8, file is between 1-8
     pub fn new_from_rank_file(rank: usize, file: usize) -> Coordinate {
@@ -669,12 +675,12 @@ impl Board {
         self.update_board_state();
     }
 
-    pub fn apply_move_with_src_dest(
-        &mut self,
+    pub fn build_move_with_src_dest(
+        &self,
         src: Coordinate,
         dest: Coordinate,
         promotes_to: Option<PieceType>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<Move, &'static str> {
         let src_piece = match self.get_from_coordinate(src) {
             Some(p) => p,
             None => return Err("Missing piece on source square"),
@@ -721,6 +727,17 @@ impl Board {
                 CastlingSide::Queenside
             };
         }
+
+        Ok(m)
+    }
+
+    pub fn apply_move_with_src_dest(
+        &mut self,
+        src: Coordinate,
+        dest: Coordinate,
+        promotes_to: Option<PieceType>,
+    ) -> Result<(), &'static str> {
+        let m = self.build_move_with_src_dest(src, dest, promotes_to)?;
         self.apply_move(&m);
         Ok(())
     }
@@ -909,11 +926,12 @@ impl Color {
     }
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum PieceType {
     Pawn,
-    Bishop,
     Knight,
+    Bishop,
     Rook,
     Queen,
     King,
@@ -952,6 +970,23 @@ impl PieceType {
             PieceType::Rook,
             PieceType::Queen,
         ]
+    }
+}
+
+impl From<u8> for PieceType {
+    fn from(pt: u8) -> Self {
+        static PIECE_TYPES: [PieceType; 6] = [
+            PieceType::Pawn,
+            PieceType::Knight,
+            PieceType::Bishop,
+            PieceType::Rook,
+            PieceType::Queen,
+            PieceType::King,
+        ];
+        if pt >= 6 {
+            panic!("Invalid piece type");
+        }
+        PIECE_TYPES[pt as usize]
     }
 }
 

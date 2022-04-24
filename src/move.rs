@@ -147,6 +147,10 @@ impl Move {
     pub fn is_castling(&self) -> bool {
         self.castling_side != CastlingSide::Unknown
     }
+
+    pub fn to_src_dest(&self) -> (Coordinate, Coordinate, Option<PieceType>) {
+        (self.src, self.dest, self.promotes_to)
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,6 @@
+#![feature(deadline_api)]
+#![feature(div_duration)]
+
 pub mod bitboard;
 pub mod board;
 pub mod engine;
@@ -28,7 +31,7 @@ pub fn clear_screen() {
     print!("{}[2J", 27 as char);
 }
 
-pub fn play_game_ai(ai_starts: bool, depth: u32, num_threads: usize) {
+pub fn play_game_ai(ai_starts: bool, depth: u8, num_threads: usize) {
     let board = Board::new_starting_pos();
     let mut game = Game::new(board);
     game.init_game_board();
