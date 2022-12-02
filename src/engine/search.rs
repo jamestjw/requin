@@ -60,6 +60,10 @@ impl Searcher {
             return Err("No legal moves available.");
         }
 
+        if num_legal_moves == 1 {
+            return Ok(*legal_moves.get(0).unwrap());
+        }
+
         // Workers will send results via tx, main thread
         // receives results via tx
         let (tx, rx) = channel();
