@@ -176,7 +176,7 @@ lazy_static! {
     };
 }
 
-fn init_magics(piece_type: PieceType, table: &mut Box<[u64]>) -> ([Magic; 64]) {
+fn init_magics(piece_type: PieceType, table: &mut Box<[u64]>) -> [Magic; 64] {
     // TODO: Is there a way to create an array without initialization?
     let mut magics = [Magic::new(); 64];
     let mut current_offset = 0;
