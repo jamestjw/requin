@@ -26,25 +26,34 @@ impl GameState {
 
 #[derive(Clone)]
 pub struct Game {
-    board_history: Vec<Board>,
+    // Tuple of board and plies from last irreversible move
+    board_history: Vec<(Board, u32)>,
     current_legal_moves: Option<Vec<Move>>, // Legal moves for the current board
     pub state: GameState,
-    plies_from_last_irreversible_move: u32, // When this is zero, it implies that the last played move was irreversible
 }
 
 impl Game {
     pub fn new(starting_board: Board) -> Game {
         Game {
-            board_history: vec![starting_board],
+            board_history: vec![(starting_board, 0)],
             current_legal_moves: Some(generate_legal_moves(&starting_board)),
             state: GameState::InProgress,
-            plies_from_last_irreversible_move: 0,
         }
+    }
+
+    pub fn get_board(&self, idx: usize) -> Option<&Board> {
+        self.board_history.get(idx).map(|(b, _)| b)
+    }
+
+    pub fn get_plies_from_reversible_move(&self) -> u32 {
+        let (_, plies) = self.board_history.last().unwrap();
+        *plies
     }
 
     pub fn current_board(&self) -> &Board {
         // Board history should never be empty
-        self.board_history.last().unwrap()
+        let (board, _) = self.board_history.last().unwrap();
+        board
     }
 
     pub fn print_current_board(&self) {
@@ -284,9 +293,11 @@ impl Game {
     pub fn apply_null_move(&mut self) {
         let mut new_board = self.current_board().clone();
         new_board.set_player_color(new_board.get_opposing_player_color());
-        self.board_history.push(new_board);
+
         // Null moves are reversible
-        self.plies_from_last_irreversible_move += 1;
+        self.board_history
+            .push((new_board, self.get_plies_from_reversible_move() + 1));
+
         self.generate_legal_moves();
         if self.current_legal_moves().len() == 0 {
             if self.current_board().is_in_check() {
@@ -307,15 +318,18 @@ impl Game {
     pub fn apply_move(&mut self, m: &Move) {
         let mut new_board = self.current_board().clone();
         new_board.apply_move(&m);
-        self.board_history.push(new_board);
 
         // Check if the move is irreversible
         // TODO: Moves that change castling rights should also be included
-        if m.is_capture || m.piece.piece_type == PieceType::Pawn || m.is_castling() {
-            self.plies_from_last_irreversible_move = 0;
-        } else {
-            self.plies_from_last_irreversible_move += 1;
-        }
+        let plies_from_last_irreversible_move =
+            if m.is_capture || m.piece.piece_type == PieceType::Pawn || m.is_castling() {
+                0
+            } else {
+                self.get_plies_from_reversible_move() + 1
+            };
+
+        self.board_history
+            .push((new_board, plies_from_last_irreversible_move));
 
         self.generate_legal_moves();
 
@@ -339,8 +353,6 @@ impl Game {
         self.board_history.pop();
         self.current_legal_moves = None;
         self.state = GameState::InProgress;
-        self.plies_from_last_irreversible_move =
-            self.plies_from_last_irreversible_move.saturating_sub(1);
     }
 
     pub fn is_game_over(&self) -> bool {
@@ -356,17 +368,19 @@ impl Game {
     }
 
     pub fn is_threefold_repetition(&self) -> bool {
-        if self.plies_from_last_irreversible_move < 8 {
+        let plies_from_last_reversible_move = self.get_plies_from_reversible_move();
+
+        if plies_from_last_reversible_move < 8 {
             return false;
         }
 
         let current_zobrist = self.get_current_zobrist();
         let mut num_matches = 0;
 
-        for ply_offset in (4..=self.plies_from_last_irreversible_move).step_by(2) {
+        for ply_offset in (4..=plies_from_last_reversible_move).step_by(2) {
             let index = self.board_history.len() - 1 - ply_offset as usize;
 
-            match self.board_history.get(index) {
+            match self.get_board(index) {
                 Some(b) => {
                     if current_zobrist == b.get_zobrist() {
                         num_matches += 1;
@@ -914,28 +928,33 @@ mod game_tests {
         );
 
         game.apply_move(&white_pawn_advance);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_pawn_advance);
         assert!(!game.is_threefold_repetition());
 
         game.apply_move(&white_king_advance);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_king_advance);
         assert!(!game.is_threefold_repetition());
 
         game.apply_move(&white_king_retreat);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_king_retreat);
         assert!(!game.is_threefold_repetition());
 
         game.apply_move(&white_king_advance);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_king_advance);
         assert!(!game.is_threefold_repetition());
 
         game.apply_move(&white_king_retreat);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_king_retreat);
         assert!(!game.is_threefold_repetition());
 
         game.apply_move(&white_king_advance);
+        assert!(!game.is_threefold_repetition());
         game.apply_move(&black_king_advance);
-
         assert!(game.is_threefold_repetition());
     }
 }
