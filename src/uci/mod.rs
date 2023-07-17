@@ -8,12 +8,12 @@ pub use client::Client;
 use go_args::GoArgs;
 pub use output::Output;
 
-use crate::board::Board;
+use crate::game::Game;
 use std::sync::{Arc, Mutex};
 
 pub struct UCIState {
     is_initialized: bool,
-    position: Option<Board>,
+    game: Option<Game>,
     go_args: Option<GoArgs>,
     num_threads: usize,
 }
@@ -22,7 +22,7 @@ impl UCIState {
     pub fn new() -> Self {
         UCIState {
             is_initialized: false,
-            position: None,
+            game: None,
             go_args: None,
             num_threads: 16,
         }

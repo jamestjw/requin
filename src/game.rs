@@ -349,6 +349,19 @@ impl Game {
         }
     }
 
+    pub fn apply_move_with_src_dest(
+        &mut self,
+        src: Coordinate,
+        dest: Coordinate,
+        promotes_to: Option<PieceType>,
+    ) -> Result<(), &'static str> {
+        let m = self
+            .current_board()
+            .build_move_with_src_dest(src, dest, promotes_to)?;
+        self.apply_move(&m);
+        Ok(())
+    }
+
     pub fn undo_move(&mut self) {
         self.board_history.pop();
         self.current_legal_moves = None;

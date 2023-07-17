@@ -174,7 +174,7 @@ fn position_with_fen<W: Write + Send + 'static>(
         Ok(board) => board,
         Err(_) => return,
     };
-    apply_moves_and_set_state::<W>(state, board, moves);
+    apply_moves_and_set_state::<W>(state, Game::new(board), moves);
 }
 
 fn position_with_startpos<W: Write + Send + 'static>(
@@ -182,8 +182,7 @@ fn position_with_startpos<W: Write + Send + 'static>(
     _output: W,
     moves: Vec<String>,
 ) {
-    let board = Board::new_starting_pos();
-    apply_moves_and_set_state::<W>(state, board, moves);
+    apply_moves_and_set_state::<W>(state, Game::new(Board::new_starting_pos()), moves);
 }
 
 fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_str: String) {
@@ -191,16 +190,17 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
     let go_args = GoArgs::new_from_args_str(args_str);
     let depth = go_args.depth;
 
-    let pos = match state.position {
-        Some(pos) => pos,
+    let game = match &state.game {
+        Some(g) => g.clone(),
         None => {
             let board = Board::new_starting_pos();
-            state.position = Some(board);
-            board
+            let game = Game::new(board);
+            state.game = Some(game.clone());
+            game
         }
     };
 
-    let player_color = pos.get_player_color();
+    let player_color = game.current_board().get_player_color();
     let (player_time, player_increment) = match player_color {
         Color::White => (go_args.wtime, go_args.winc),
         Color::Black => (go_args.btime, go_args.binc),
@@ -208,7 +208,7 @@ fn go<W: Write + Send + 'static>(state: ArcMutexUCIState, mut output: W, args_st
 
     state.go_args = Some(go_args);
 
-    let mut searcher = Searcher::new(Game::new(pos), depth, state.num_threads);
+    let mut searcher = Searcher::new(game, depth, state.num_threads);
     let search_time = player_time.map(|t| max_search_time(t, player_increment.unwrap_or(0)));
 
     match searcher.get_best_move(search_time) {
@@ -235,7 +235,7 @@ fn ponderhit<W: Write + Send + 'static>(_state: ArcMutexUCIState, _output: W) {
 
 fn apply_moves_and_set_state<W: Write + Send + 'static>(
     state: ArcMutexUCIState,
-    mut board: Board,
+    mut game: Game,
     moves: Vec<String>,
 ) {
     let mut state = state.lock().unwrap();
@@ -243,7 +243,7 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
     for m in moves {
         let (src, dest, promotes_to) = Coordinate::new_from_long_algebraic_notation(&m);
         // We try to apply as many moves as possible
-        match board.apply_move_with_src_dest(src, dest, promotes_to) {
+        match game.apply_move_with_src_dest(src, dest, promotes_to) {
             Ok(_) => {}
             Err(e) => {
                 println!("Illegal move {}. Error: {}", m, e);
@@ -251,7 +251,7 @@ fn apply_moves_and_set_state<W: Write + Send + 'static>(
             }
         }
     }
-    state.position = Some(board);
+    state.game = Some(game);
 }
 
 fn set_option<W: Write + Send + 'static>(
@@ -338,7 +338,7 @@ mod test {
         position_with_startpos(state.clone(), output_buffer.clone(), vec![]);
 
         assert_eq!(
-            state.lock().unwrap().position.unwrap(),
+            *state.lock().unwrap().game.as_ref().unwrap().current_board(),
             Board::new_starting_pos()
         );
     }
@@ -353,7 +353,14 @@ mod test {
             vec![String::from("e2e4"), String::from("e7e5")],
         );
 
-        let board = state.lock().unwrap().position.unwrap();
+        let board = state
+            .lock()
+            .unwrap()
+            .game
+            .as_ref()
+            .unwrap()
+            .current_board()
+            .clone();
 
         assert!(board.get_from_coordinate(Coordinate::E2).is_none());
         assert!(board.get_from_coordinate(Coordinate::E7).is_none());
@@ -376,7 +383,17 @@ mod test {
             crate::parser::parse_fen(String::from("8/8/4Rp2/5P2/1PP1pkP1/7P/1P1r4/7K b - - 0 40"))
                 .unwrap();
 
-        assert_eq!(state.lock().unwrap().position.unwrap(), expected_board);
+        assert_eq!(
+            state
+                .lock()
+                .unwrap()
+                .game
+                .as_ref()
+                .unwrap()
+                .current_board()
+                .clone(),
+            expected_board
+        );
     }
 
     #[test]
@@ -393,7 +410,7 @@ mod test {
         let expected_board =
             crate::parser::parse_fen(String::from("8/8/5p2/5P2/1PP1R1P1/6kP/1P1r4/7K b - - 0 41"))
                 .unwrap();
-        let board = state.lock().unwrap().position.unwrap();
+        let board = *state.lock().unwrap().game.as_ref().unwrap().current_board();
 
         assert_eq!(expected_board, board);
     }
