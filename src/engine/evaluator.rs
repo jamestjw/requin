@@ -208,84 +208,89 @@ static PASSED_PAWN_BONUS: [Score; 7] = [
     Score(130, 0),
 ];
 
+const KILLER_MOVE_OFFSET: i32 = 10;
+
 lazy_static! {
-    static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
-        let mut vals = [[[[Score(0, 0); 8]; 8]; 6]; 2];
+static ref PIECE_POSITIONAL_VALUES: [[[[Score; 8]; 8]; 6]; 2] = {
+    let mut vals = [[[[Score(0, 0); 8]; 8]; 6]; 2];
 
-        for piece_type in PieceType::iter() {
-            let mut scores = match piece_type {
-                PieceType::Pawn => WHITE_PAWN_POSITIONAL_VALUE,
-                PieceType::Bishop => WHITE_BISHOP_POSITIONAL_VALUE,
-                PieceType::Knight => WHITE_KNIGHT_POSITIONAL_VALUE,
-                PieceType::Rook => WHITE_ROOK_POSITIONAL_VALUE,
-                PieceType::Queen => WHITE_QUEEN_POSITIONAL_VALUE,
-                PieceType::King => WHITE_KING_POSITIONAL_VALUE,
-            };
+    for piece_type in PieceType::iter() {
+        let mut scores = match piece_type {
+            PieceType::Pawn => WHITE_PAWN_POSITIONAL_VALUE,
+            PieceType::Bishop => WHITE_BISHOP_POSITIONAL_VALUE,
+            PieceType::Knight => WHITE_KNIGHT_POSITIONAL_VALUE,
+            PieceType::Rook => WHITE_ROOK_POSITIONAL_VALUE,
+            PieceType::Queen => WHITE_QUEEN_POSITIONAL_VALUE,
+            PieceType::King => WHITE_KING_POSITIONAL_VALUE,
+        };
 
-            vals[Color::White as usize][piece_type as usize] = scores;
-            scores.reverse();
-            vals[Color::Black as usize][piece_type as usize] = scores;
-        }
-        vals
-    };
-    static ref MOBILITY_BONUS: [[Score; 28]; 6] = {
-        let mut table = [[Score(0, 0); 28]; 6];
+        vals[Color::White as usize][piece_type as usize] = scores;
+        scores.reverse();
+        vals[Color::Black as usize][piece_type as usize] = scores;
+    }
+    vals
+};
+static ref MOBILITY_BONUS: [[Score; 28]; 6] = {
+    let mut table = [[Score(0, 0); 28]; 6];
 
-        // Knight mobility
-        let knight_scores = [
-            Score(-62,-79), Score(-53,-57), Score(-12,-31), Score( -3,-17), Score(  3,  7), Score( 12, 13),
-            Score( 21, 16), Score( 28, 21), Score( 37, 26)
-        ];
+    // Knight mobility
+    let knight_scores = [
+        Score(-62,-79), Score(-53,-57), Score(-12,-31), Score( -3,-17), Score(  3,  7), Score( 12, 13),
+        Score( 21, 16), Score( 28, 21), Score( 37, 26)
+    ];
 
-        let bishop_scores = [ Score(-47,-59), Score(-20,-25), Score( 14, -8), Score( 29, 12), Score( 39, 21), Score( 53, 40),
-            Score( 53, 56), Score( 60, 58), Score( 62, 65), Score( 69, 72), Score( 78, 78), Score( 83, 87),
-            Score( 91, 88), Score( 96, 98)
-        ];
+    let bishop_scores = [ Score(-47,-59), Score(-20,-25), Score( 14, -8), Score( 29, 12), Score( 39, 21), Score( 53, 40),
+        Score( 53, 56), Score( 60, 58), Score( 62, 65), Score( 69, 72), Score( 78, 78), Score( 83, 87),
+        Score( 91, 88), Score( 96, 98)
+    ];
 
-        let rook_scores = [ Score(-60,-82), Score(-24,-15), Score(  0, 17) ,Score(  3, 43), Score(  4, 72), Score( 14,100),
-            Score( 20,102), Score( 30,122), Score( 41,133), Score(41 ,139), Score( 41,153), Score( 45,160),
-            Score( 57,165), Score( 58,170), Score( 67,175)
-        ];
-        let queen_scores = [ Score(-29,-49), Score(-16,-29), Score( -8, -8), Score( -8, 17), Score( 18, 39), Score( 25, 54),
-            Score( 23, 59), Score( 37, 73), Score( 41, 76), Score( 54, 95), Score( 65, 95) ,Score( 68,101),
-            Score( 69,124), Score( 70,128), Score( 70,132), Score( 70,133) ,Score( 71,136), Score( 72,140),
-            Score( 74,147), Score( 76,149), Score( 90,153), Score(104,169), Score(105,171), Score(106,171),
-            Score(112,178), Score(114,185), Score(114,187), Score(119,221)
-        ];
-
-
-        table[PieceType::Knight as usize] = [knight_scores[knight_scores.len() - 1]; 28];
-        for (i, score) in knight_scores.iter().enumerate() {
-            table[PieceType::Knight as usize][i] = *score;
-        }
-
-        table[PieceType::Bishop as usize] = [bishop_scores[bishop_scores.len() - 1]; 28];
-        for (i, score) in bishop_scores.iter().enumerate() {
-            table[PieceType::Bishop as usize][i] = *score;
-        }
-
-        table[PieceType::Rook as usize] = [rook_scores[rook_scores.len() - 1]; 28];
-        for (i, score) in rook_scores.iter().enumerate() {
-            table[PieceType::Rook as usize][i] = *score;
-        }
-
-        table[PieceType::Queen as usize] = [queen_scores[queen_scores.len() - 1]; 28];
-        for (i, score) in queen_scores.iter().enumerate() {
-            table[PieceType::Queen as usize][i] = *score;
-        }
-
-        table
-    };
+    let rook_scores = [ Score(-60,-82), Score(-24,-15), Score(  0, 17) ,Score(  3, 43), Score(  4, 72), Score( 14,100),
+        Score( 20,102), Score( 30,122), Score( 41,133), Score(41 ,139), Score( 41,153), Score( 45,160),
+        Score( 57,165), Score( 58,170), Score( 67,175)
+    ];
+    let queen_scores = [ Score(-29,-49), Score(-16,-29), Score( -8, -8), Score( -8, 17), Score( 18, 39), Score( 25, 54),
+        Score( 23, 59), Score( 37, 73), Score( 41, 76), Score( 54, 95), Score( 65, 95) ,Score( 68,101),
+        Score( 69,124), Score( 70,128), Score( 70,132), Score( 70,133) ,Score( 71,136), Score( 72,140),
+        Score( 74,147), Score( 76,149), Score( 90,153), Score(104,169), Score(105,171), Score(106,171),
+        Score(112,178), Score(114,185), Score(114,187), Score(119,221)
+    ];
 
 
-    static ref KING_ATTACKERS_PENALTY: [Score; 6] = {
-        let mut table: [Score; 6] = [Score(0, 0); 6];
-        table[PieceType::Bishop as usize] =  Score(-20, 0);
-        table[PieceType::Knight as usize] =  Score(-20, 0);
-        table[PieceType::Rook as usize] =  Score(-40, 0);
-        table[PieceType::Queen as usize] =  Score(-80, 0);
-        table
-    };
+    table[PieceType::Knight as usize] = [knight_scores[knight_scores.len() - 1]; 28];
+    for (i, score) in knight_scores.iter().enumerate() {
+        table[PieceType::Knight as usize][i] = *score;
+    }
+
+    table[PieceType::Bishop as usize] = [bishop_scores[bishop_scores.len() - 1]; 28];
+    for (i, score) in bishop_scores.iter().enumerate() {
+        table[PieceType::Bishop as usize][i] = *score;
+    }
+
+    table[PieceType::Rook as usize] = [rook_scores[rook_scores.len() - 1]; 28];
+    for (i, score) in rook_scores.iter().enumerate() {
+        table[PieceType::Rook as usize][i] = *score;
+    }
+
+    table[PieceType::Queen as usize] = [queen_scores[queen_scores.len() - 1]; 28];
+    for (i, score) in queen_scores.iter().enumerate() {
+        table[PieceType::Queen as usize][i] = *score;
+    }
+
+    table
+};
+
+
+static ref KING_ATTACKERS_PENALTY: [Score; 6] = {
+    let mut table: [Score; 6] = [Score(0, 0); 6];
+    table[PieceType::Bishop as usize] =  Score(-20, 0);
+    table[PieceType::Knight as usize] =  Score(-20, 0);
+    table[PieceType::Rook as usize] =  Score(-40, 0);
+    table[PieceType::Queen as usize] =  Score(-80, 0);
+    table
+};
+
+static ref FST_KILLER_MOVE_SCORE: i32 = get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame) - KILLER_MOVE_OFFSET;
+static ref SND_KILLER_MOVE_SCORE: i32 = get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame) - KILLER_MOVE_OFFSET * 2;
 }
 
 pub fn get_raw_piece_value(pt: PieceType) -> Score {
@@ -748,6 +753,14 @@ fn calculate_passed_pawns_bonus(board: &Board, color: Color) -> Score {
 
 fn get_king_attackers_penalty(pt: PieceType) -> Score {
     KING_ATTACKERS_PENALTY[pt as usize]
+}
+
+pub fn get_nth_killer_move_score(n: usize) -> i32 {
+    match n {
+        0 => *FST_KILLER_MOVE_SCORE,
+        1 => *SND_KILLER_MOVE_SCORE,
+        _ => panic!("Invalid killer move"),
+    }
 }
 
 #[cfg(test)]
