@@ -471,30 +471,32 @@ impl Searcher {
     // per ply. If NUM_KILLER_MOVES is changed, this implementation
     // will also have to be changed.
     fn store_killer_move(&mut self, m: Move, curr_ply: u8) {
-        match (
-            self.info.killer_moves[curr_ply as usize][0],
-            self.info.killer_moves[curr_ply as usize][1],
-        ) {
-            // If both slots are already occupied, too bad we don't
-            // overwrite any of them
-            // TODO: Investigate this! Is it helpful to do some
-            // form of eviction or reordering?
-            (Some(_), Some(_)) => (),
-            // If the current move is already saved, we ignore it.
-            // Otherwise, we put the current move in the first slot
-            // and shift the previous move to the next slot.
-            (Some(saved_move), None) => {
-                if saved_move == m {
-                    self.info.killer_moves[curr_ply as usize][0] = Some(m);
-                    self.info.killer_moves[curr_ply as usize][1] = Some(saved_move)
+        if (curr_ply as usize) < MAX_SEARCH_PLIES {
+            match (
+                self.info.killer_moves[curr_ply as usize][0],
+                self.info.killer_moves[curr_ply as usize][1],
+            ) {
+                // If both slots are already occupied, too bad we don't
+                // overwrite any of them
+                // TODO: Investigate this! Is it helpful to do some
+                // form of eviction or reordering?
+                (Some(_), Some(_)) => (),
+                // If the current move is already saved, we ignore it.
+                // Otherwise, we put the current move in the first slot
+                // and shift the previous move to the next slot.
+                (Some(saved_move), None) => {
+                    if saved_move == m {
+                        self.info.killer_moves[curr_ply as usize][0] = Some(m);
+                        self.info.killer_moves[curr_ply as usize][1] = Some(saved_move)
+                    }
                 }
+                // If no moves have been saved yet, just save the
+                // given move.
+                // Note: based on how the other branch works, if the
+                // first slot is empty, we can safely assume that the
+                // second one is also empty.
+                (None, _) => self.info.killer_moves[curr_ply as usize][0] = Some(m),
             }
-            // If no moves have been saved yet, just save the
-            // given move.
-            // Note: based on how the other branch works, if the
-            // first slot is empty, we can safely assume that the
-            // second one is also empty.
-            (None, _) => self.info.killer_moves[curr_ply as usize][0] = Some(m),
         }
     }
 
