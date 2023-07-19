@@ -12,7 +12,7 @@ struct Opt {
     #[structopt(
         short,
         long,
-        default_value = "ai",
+        default_value = "uci",
         help = "Available game modes: 'ai', 'pvp' and 'uci'"
     )]
     mode: String,
