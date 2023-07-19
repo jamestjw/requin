@@ -209,7 +209,19 @@ impl Searcher {
             if tt_search_data.depth() >= remaining_depth
                 && tt_search_data.node_type() == NodeType::PV
             {
-                return tt_search_data.score();
+                match tt_search_data.node_type() {
+                    NodeType::PV => return tt_search_data.score(),
+                    NodeType::Cut => {
+                        if tt_search_data.score() >= beta {
+                            return beta;
+                        }
+                    }
+                    NodeType::All => {
+                        if tt_search_data.score() <= alpha {
+                            return alpha;
+                        }
+                    }
+                }
             }
 
             if tt_search_data.node_type() == NodeType::PV
@@ -304,11 +316,10 @@ impl Searcher {
             self.game.undo_move();
 
             if score >= beta {
-                // TODO: Figure out the score to save here
                 self.tt.set_entry(
                     zobrist,
                     build_tt_entry(
-                        Some(&m),
+                        best_move.as_ref(),
                         zobrist,
                         remaining_depth as u8,
                         score,
