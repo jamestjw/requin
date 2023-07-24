@@ -1,4 +1,6 @@
-use super::evaluator::{evaluate_board, static_exchange_evaluation_capture};
+use super::evaluator::{
+    evaluate_board, get_nth_killer_move_score, static_exchange_evaluation_capture,
+};
 use super::tt::{
     build_new_tt, NodeType, TranspositionTable, TranspositionTableEntry,
     TranspositionTableEntryMoveData, TranspositionTableEntrySearchData,
@@ -23,6 +25,9 @@ static FUTILITY_MARGIN_2: i32 = 1300; // Approximately equal to the value of a r
 static DELTA_PRUNING_THRESHOLD: i32 = 2538; // Value of a queen
 static NULL_MOVE_PRUNING_R: u8 = 2;
 
+const NUM_KILLER_MOVES: usize = 2;
+const MAX_SEARCH_PLIES: usize = 25;
+
 #[derive(Clone)]
 pub struct Searcher {
     pub game: Game,
@@ -30,6 +35,7 @@ pub struct Searcher {
     num_threads: usize,
     nodes_searched: u32,
     tt: TranspositionTable,
+    info: SearchInfo,
 }
 
 impl Searcher {
@@ -43,16 +49,23 @@ impl Searcher {
             num_threads,
             nodes_searched: 0,
             tt: build_new_tt(),
+            info: SearchInfo::new(),
         }
+    }
+
+    pub fn reset_search_info(&mut self) {
+        self.info = SearchInfo::new()
     }
 
     /// # Arguments
     ///
     /// * `time_limit` - Maximum search time in milliseconds
     pub fn get_best_move(&mut self, time_limit: Option<u32>) -> Result<Move, &str> {
+        self.reset_search_info();
         let mut legal_moves = self.game.current_legal_moves().clone();
         let num_legal_moves = legal_moves.len();
         let is_white_turn = self.game.current_board().is_white_turn();
+
         // Save zobrist to fill up the TT
         let zobrist = self.game.get_current_zobrist();
 
@@ -75,7 +88,7 @@ impl Searcher {
         let deadline = time_limit.map(|l| start_time + l);
 
         // Iterative deepening
-        for current_search_depth in 1..=max_search_depth {
+        for current_search_depth in 0..=(max_search_depth - 1) {
             let elapsed_time = Instant::now().duration_since(start_time);
 
             // Consider skipping the current iteration if the time situation is not good
@@ -92,18 +105,17 @@ impl Searcher {
             for m in &legal_moves {
                 let tx = tx.clone();
                 let mut searcher = self.clone();
-                let search_depth = current_search_depth - 1;
                 let m = m.clone();
                 searcher.game.apply_move(&m);
                 pool.execute(move || {
                     // Whether a move can be pruned depends on whether it is a capture
                     let curr_eval = -searcher.alpha_beta(
-                        search_depth,
+                        current_search_depth,
                         INITIAL_ALPHA,
                         INITIAL_BETA,
                         is_white_turn,
                         !m.is_capture,
-                        1, // Start with search depth 1
+                        0, // Start with search depth 0 (zero-indexed)
                     );
 
                     tx.send((m, curr_eval))
@@ -163,7 +175,7 @@ impl Searcher {
         beta: i32,
         is_white: bool,
         can_prune: bool,
-        mut searched_depth: u32,
+        searched_depth: u8,
     ) -> i32 {
         match self.game.state {
             GameState::InProgress => {}
@@ -176,9 +188,7 @@ impl Searcher {
             return DRAW_SCORE;
         }
 
-        searched_depth += 1;
-
-        if remaining_depth == 0 {
+        if remaining_depth == 0 || (searched_depth as usize) == MAX_SEARCH_PLIES {
             return self.quiesce(alpha, beta, is_white, searched_depth);
         } else if remaining_depth == 1 {
             // Futility pruning
@@ -251,8 +261,9 @@ impl Searcher {
         // Move ordering
         // 1. Hash move
         // 2. Good captures
-        // 3. Bad captures
-        // 4. Non-captures
+        // 3. Killer moves
+        // 4. Bad captures
+        // 5. Non-captures
         let mut legal_moves = self
             .game
             .current_legal_moves()
@@ -267,6 +278,8 @@ impl Searcher {
                         i32::MAX
                     } else if m.is_capture {
                         static_exchange_evaluation_capture(self.game.current_board(), &m)
+                    } else if let Some(n) = self.is_killer_move_at_ply(&m, searched_depth) {
+                        get_nth_killer_move_score(n as usize)
                     } else {
                         // Give non-captures a low score for them to be evaluated last
                         i32::MIN
@@ -278,16 +291,16 @@ impl Searcher {
         legal_moves.sort_by(|(_, score1), (_, score2)| score2.cmp(score1));
 
         // Maybe do null move pruning
-        if self.may_do_null_move_pruning(remaining_depth - 1, is_white) {
+        if self.may_do_null_move_pruning(remaining_depth, is_white) {
             self.game.apply_null_move();
             // Do an alpha beta search with reduced depth
             let score = -self.alpha_beta(
-                remaining_depth - 1 - NULL_MOVE_PRUNING_R,
+                remaining_depth - NULL_MOVE_PRUNING_R,
                 -beta,
                 -alpha,
                 !is_white,
                 false,
-                searched_depth - 1,
+                searched_depth + 1,
             );
             self.game.undo_move();
             if score >= beta {
@@ -311,7 +324,7 @@ impl Searcher {
                 -alpha,
                 !is_white,
                 !m.is_capture,
-                searched_depth,
+                searched_depth + 1,
             );
             self.game.undo_move();
 
@@ -326,6 +339,7 @@ impl Searcher {
                         NodeType::Cut,
                     ),
                 );
+                self.store_killer_move(m, searched_depth);
                 return beta;
             }
 
@@ -358,7 +372,7 @@ impl Searcher {
         mut alpha: i32,
         beta: i32,
         is_white: bool,
-        mut searched_depth: u32,
+        searched_depth: u8,
     ) -> i32 {
         match self.game.state {
             GameState::InProgress => {}
@@ -370,8 +384,6 @@ impl Searcher {
         if self.game.is_threefold_repetition() {
             return DRAW_SCORE;
         }
-
-        searched_depth += 1;
 
         let offset = if is_white { -1 } else { 1 };
         let stand_pat = offset * evaluate_board(self.game.current_board());
@@ -412,10 +424,12 @@ impl Searcher {
             self.nodes_searched += 1;
 
             self.game.apply_move(&m);
-            let score = -self.quiesce(-beta, -alpha, !is_white, searched_depth);
+            let score = -self.quiesce(-beta, -alpha, !is_white, searched_depth + 1);
             self.game.undo_move();
 
             if score >= beta {
+                // TODO: Should this be stored?
+                self.store_killer_move(m, searched_depth as u8);
                 return beta;
             }
 
@@ -451,6 +465,78 @@ impl Searcher {
             != 0
             && !self.game.is_in_check()
             && remaining_depth >= NULL_MOVE_PRUNING_R
+    }
+
+    // This implementation relies on there being only 2 killer moves
+    // per ply. If NUM_KILLER_MOVES is changed, this implementation
+    // will also have to be changed.
+    fn store_killer_move(&mut self, m: Move, curr_ply: u8) {
+        if (curr_ply as usize) < MAX_SEARCH_PLIES {
+            match (
+                self.info.killer_moves[curr_ply as usize][0],
+                self.info.killer_moves[curr_ply as usize][1],
+            ) {
+                // If both slots are already occupied, too bad we don't
+                // overwrite any of them
+                // TODO: Investigate this! Is it helpful to do some
+                // form of eviction or reordering?
+                (Some(_), Some(_)) => (),
+                // If the current move is already saved, we ignore it.
+                // Otherwise, we put the current move in the first slot
+                // and shift the previous move to the next slot.
+                (Some(saved_move), None) => {
+                    if saved_move == m {
+                        self.info.killer_moves[curr_ply as usize][0] = Some(m);
+                        self.info.killer_moves[curr_ply as usize][1] = Some(saved_move)
+                    }
+                }
+                // If no moves have been saved yet, just save the
+                // given move.
+                // Note: based on how the other branch works, if the
+                // first slot is empty, we can safely assume that the
+                // second one is also empty.
+                (None, _) => self.info.killer_moves[curr_ply as usize][0] = Some(m),
+            }
+        }
+    }
+
+    // fn get_killer_move(&self, n: usize, curr_ply: u8) -> Option<Move> {
+    //     assert!(n < NUM_KILLER_MOVES);
+    //     self.info.killer_moves[curr_ply as usize][n]
+    // }
+
+    fn is_killer_move_at_ply(&self, m: &Move, ply: u8) -> Option<u8> {
+        if let Some(killer) = self.info.killer_moves[ply as usize][0] {
+            if *m == killer {
+                return Some(0);
+            }
+        }
+
+        if let Some(killer) = self.info.killer_moves[ply as usize][1] {
+            if *m == killer {
+                return Some(1);
+            }
+        }
+
+        None
+    }
+}
+
+// TODO: Number of killer moves could be made to be dynamic
+// But for now the code the relies on the fact that there are
+// only 2 killer moves.
+type KillerMoves = [[Option<Move>; NUM_KILLER_MOVES]; MAX_SEARCH_PLIES];
+
+#[derive(Clone)]
+struct SearchInfo {
+    killer_moves: KillerMoves,
+}
+
+impl SearchInfo {
+    pub fn new() -> Self {
+        Self {
+            killer_moves: [[None; NUM_KILLER_MOVES]; MAX_SEARCH_PLIES],
+        }
     }
 }
 
@@ -496,7 +582,7 @@ mod test {
 
         assert!(tt_entry.is_valid(zobrist_to_inspect));
         assert_eq!(tt_entry.get_key(), zobrist_to_inspect);
-        assert_eq!(tt_search_data.depth(), 1);
+        assert_eq!(tt_search_data.depth(), 0);
         assert_ne!(tt_search_data.score(), 0);
         assert_eq!(tt_search_data.node_type(), NodeType::PV);
         assert_eq!(tt_move_data.best_move_src(), best_move.src);
