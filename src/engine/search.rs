@@ -6,11 +6,9 @@ use super::tt::{
     TranspositionTableEntryMoveData, TranspositionTableEntrySearchData,
 };
 use crate::board::Color;
+use crate::game::{Game, GameState};
+use crate::generator::filter_non_quiescent_moves;
 use crate::r#move::Move;
-use crate::{
-    game::{Game, GameState},
-    generator::generate_non_quiescent_moves,
-};
 
 use std::sync::mpsc::channel;
 use std::time::{Duration, Instant};
@@ -388,8 +386,10 @@ impl Searcher {
         let offset = if is_white { -1 } else { 1 };
         let stand_pat = offset * evaluate_board(self.game.current_board());
 
+        let in_check = self.game.current_board().is_in_check();
+
         // Do not return stand-pat if in check
-        if stand_pat >= beta && !self.game.current_board().is_in_check() {
+        if stand_pat >= beta && !in_check {
             return beta;
         }
 
@@ -405,20 +405,23 @@ impl Searcher {
         }
 
         // Sort moves based on SEE
-        let mut non_quiescent_moves = generate_non_quiescent_moves(self.game.current_board())
-            .into_iter()
-            .map(|m| {
-                (
-                    m,
-                    static_exchange_evaluation_capture(&self.game.current_board(), &m),
-                )
-            })
-            .collect::<Vec<(Move, i32)>>();
+        let mut non_quiescent_moves = filter_non_quiescent_moves(
+            self.game.current_board(),
+            self.game.current_legal_moves().clone(),
+        )
+        .into_iter()
+        .map(|m| {
+            (
+                m,
+                static_exchange_evaluation_capture(&self.game.current_board(), &m),
+            )
+        })
+        .collect::<Vec<(Move, i32)>>();
         non_quiescent_moves.sort_by(|(_, see1), (_, see2)| see2.cmp(see1));
 
         for (m, see) in non_quiescent_moves {
             // Prune captures with SEE < 0
-            if see < 0 && !self.game.current_board().is_in_check() {
+            if see < 0 && !in_check {
                 break;
             }
             self.nodes_searched += 1;
