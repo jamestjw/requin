@@ -121,7 +121,7 @@ impl Searcher {
                     while !done {
                         let (alpha, beta) = if current_search_depth >= 2 {
                             match expected_value {
-                                Some(v) => (v + cur_alpha_window, v - cur_beta_window),
+                                Some(v) => (v - cur_alpha_window, v + cur_beta_window),
                                 None => (INITIAL_ALPHA, INITIAL_BETA),
                             }
                         } else if has_failed_high && has_failed_low {
@@ -142,10 +142,10 @@ impl Searcher {
                         );
 
                         // widen the window by a factor of two
-                        if curr_eval > beta {
+                        if -curr_eval > beta {
                             cur_beta_window *= 2;
                             has_failed_high = true;
-                        } else if curr_eval < alpha {
+                        } else if -curr_eval < alpha {
                             cur_alpha_window *= 2;
                             has_failed_low = true;
                         } else {
