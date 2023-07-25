@@ -306,9 +306,28 @@ impl Searcher {
             }
         }
 
+        let is_in_check = self.game.is_in_check();
+
         let mut best_move: Option<Move> = None;
 
-        for (m, _) in legal_moves {
+        for (i, (m, _)) in legal_moves.iter().enumerate() {
+            let original_remaining_depth = remaining_depth - 1;
+            let mut search_depth = original_remaining_depth;
+            let mut reduced = false;
+
+            // LMR depth reduction
+            // If the first 4 moves don't fail high (if we fail high we would've returned)
+            // and the current move is not
+            // - a capture
+            // - a promotion
+            // - while in check
+            // and the current search depth < 2 (0 - indexed)
+            // TODO: Moves that give check shouldn't be reduced too!
+            if i >= 4 && !(m.is_capture || m.is_promotion || is_in_check || search_depth < 2) {
+                search_depth -= 1;
+                reduced = true;
+            }
+
             // TODO: Fix how null move pruning makes this value more than
             // what it should be
             self.nodes_searched += 1;
@@ -316,8 +335,8 @@ impl Searcher {
             self.game.apply_move(&m);
             // Whether or not a node can be pruned depends on whether
             // the move was a 'peaceful' move
-            let score = -self.alpha_beta(
-                remaining_depth - 1,
+            let mut score = -self.alpha_beta(
+                search_depth,
                 -beta,
                 -alpha,
                 !is_white,
@@ -332,17 +351,51 @@ impl Searcher {
                     build_tt_entry(
                         best_move.as_ref(),
                         zobrist,
-                        remaining_depth as u8,
+                        search_depth + 1 as u8,
                         score,
                         NodeType::Cut,
                     ),
                 );
-                self.store_killer_move(m, searched_depth);
+                self.store_killer_move(*m, searched_depth);
                 return beta;
             }
 
+            // TODO: This needs to be refactored!!
+            // If LMR returned a move with score > alpha, we
+            // need to research at full depth
+            if reduced && score > alpha {
+                self.game.apply_move(&m);
+                // Whether or not a node can be pruned depends on whether
+                // the move was a 'peaceful' move
+                score = -self.alpha_beta(
+                    original_remaining_depth,
+                    -beta,
+                    -alpha,
+                    !is_white,
+                    !m.is_capture,
+                    searched_depth + 1,
+                );
+                self.game.undo_move();
+
+                // Second chance for beta cutoff
+                if score >= beta {
+                    self.tt.set_entry(
+                        zobrist,
+                        build_tt_entry(
+                            best_move.as_ref(),
+                            zobrist,
+                            original_remaining_depth + 1 as u8,
+                            score,
+                            NodeType::Cut,
+                        ),
+                    );
+                    self.store_killer_move(*m, searched_depth);
+                    return beta;
+                }
+            }
+
             if score > alpha {
-                best_move = Some(m);
+                best_move = Some(*m);
                 alpha = score;
             }
         }
