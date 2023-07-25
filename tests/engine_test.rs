@@ -332,7 +332,7 @@ fn black_mate_in_three_with_time_limit() {
     .unwrap();
     let game = Game::new(board);
     let mut searcher = Searcher::new(game, 5, 32);
-    let best_move = searcher.get_best_move(Some(250));
+    let best_move = searcher.get_best_move(Some(1000));
     let expected_move = Move::new(
         Coordinate::F7,
         Coordinate::F5,

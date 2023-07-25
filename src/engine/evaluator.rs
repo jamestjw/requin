@@ -291,6 +291,8 @@ static ref KING_ATTACKERS_PENALTY: [Score; 6] = {
 
 static ref FST_KILLER_MOVE_SCORE: i32 = get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame) - KILLER_MOVE_OFFSET;
 static ref SND_KILLER_MOVE_SCORE: i32 = get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame) - KILLER_MOVE_OFFSET * 2;
+
+pub static ref PAWN_VALUE: i32 = get_raw_piece_value(PieceType::Pawn).get_for_phase(Phase::Midgame);
 }
 
 pub fn get_raw_piece_value(pt: PieceType) -> Score {

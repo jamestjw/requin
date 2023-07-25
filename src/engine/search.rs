@@ -1,5 +1,5 @@
 use super::evaluator::{
-    evaluate_board, get_nth_killer_move_score, static_exchange_evaluation_capture,
+    evaluate_board, get_nth_killer_move_score, static_exchange_evaluation_capture, PAWN_VALUE,
 };
 use super::tt::{
     build_new_tt, NodeType, TranspositionTable, TranspositionTableEntry,
@@ -87,6 +87,9 @@ impl Searcher {
         let time_limit = time_limit.map(|l| Duration::from_millis(l as u64));
         let deadline = time_limit.map(|l| start_time + l);
 
+        // Expected value used in aspiration windows
+        let mut expected_value: Option<i32> = None;
+
         // Iterative deepening
         for current_search_depth in 0..=(max_search_depth - 1) {
             let elapsed_time = Instant::now().duration_since(start_time);
@@ -108,18 +111,50 @@ impl Searcher {
                 let m = m.clone();
                 searcher.game.apply_move(&m);
                 pool.execute(move || {
-                    // Whether a move can be pruned depends on whether it is a capture
-                    let curr_eval = -searcher.alpha_beta(
-                        current_search_depth,
-                        INITIAL_ALPHA,
-                        INITIAL_BETA,
-                        is_white_turn,
-                        !m.is_capture,
-                        0, // Start with search depth 0 (zero-indexed)
-                    );
+                    // Aspiration windows
+                    let mut done = false;
+                    let mut cur_alpha_window = PAWN_VALUE.checked_div(2).unwrap();
+                    let mut cur_beta_window = PAWN_VALUE.checked_div(2).unwrap();
+                    let mut has_failed_high = false;
+                    let mut has_failed_low = false;
 
-                    tx.send((m, curr_eval))
-                        .expect("Unexpected error: Main thread is not receiving.");
+                    while !done {
+                        let (alpha, beta) = if current_search_depth >= 2 {
+                            match expected_value {
+                                Some(v) => (v + cur_alpha_window, v - cur_beta_window),
+                                None => (INITIAL_ALPHA, INITIAL_BETA),
+                            }
+                        } else if has_failed_high && has_failed_low {
+                            // Unstable search?
+                            (INITIAL_ALPHA, INITIAL_BETA)
+                        } else {
+                            (INITIAL_ALPHA, INITIAL_BETA)
+                        };
+                        // println!("Searching with alpha {alpha} beta {beta}");
+                        // Whether a move can be pruned depends on whether it is a capture
+                        let curr_eval = -searcher.alpha_beta(
+                            current_search_depth,
+                            alpha,
+                            beta,
+                            is_white_turn,
+                            !m.is_capture,
+                            0, // Start with search depth 0 (zero-indexed)
+                        );
+
+                        // widen the window by a factor of two
+                        if curr_eval > beta {
+                            cur_beta_window *= 2;
+                            has_failed_high = true;
+                        } else if curr_eval < alpha {
+                            cur_alpha_window *= 2;
+                            has_failed_low = true;
+                        } else {
+                            done = true;
+
+                            tx.send((m, curr_eval))
+                                .expect("Unexpected error: Main thread is not receiving.");
+                        }
+                    }
                 });
             }
 
@@ -161,6 +196,7 @@ impl Searcher {
                 ),
             );
             best_move = Some(candidate_move);
+            expected_value = Some(candidate_move_score);
         }
 
         Ok(best_move.unwrap())
