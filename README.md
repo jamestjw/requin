@@ -1,6 +1,6 @@
 # requin
 
-A UCI chess program. It also comes with a chess engine (that is currently decently strong, i.e. about 1800 Lichess strength). You may play me on [lichess](https://lichess.org/@/requinBOT).
+A UCI chess program. It also comes with a chess engine (that is currently decently strong, i.e. about 2000 Lichess strength). You may play me on [lichess](https://lichess.org/@/requinBOT).
 
 ## Design
 ### Generation of Legal Moves
